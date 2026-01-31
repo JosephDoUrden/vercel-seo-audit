@@ -1,21 +1,63 @@
 # vercel-seo-audit
 
-> If you're using Vercel and Google hates your site, this is for you.
+> **If you're using Vercel and Google hates your site, this is for you.**
 
-CLI tool that diagnoses SEO and indexing issues for Next.js/Vercel websites. Catches the problems that tank your search rankings — broken redirects, missing sitemaps, noindex tags you forgot about, and Vercel-specific quirks that silently kill your crawl budget.
+A fast, developer-friendly CLI that explains **why Google isn’t indexing your Next.js site** — beyond the vague stuff in Search Console.
+It detects the misconfigs that silently kill crawling and indexing: **redirect traps (308), missing robots/sitemap, noindex headers, canonical mismatches, and Vercel/Next.js quirks**.
 
-## Install
+---
+
+## Why this exists
+
+Google Search Console often reports symptoms like:
+- *“Page with redirect”*
+- *“Discovered – currently not indexed”*
+- *“Alternate page with proper canonical”*
+
+…but doesn’t tell you **what’s actually wrong** or **what to change**.
+
+`vercel-seo-audit` turns those symptoms into **actionable fixes**.
+
+---
+
+## Quick start
 
 ```bash
 npx vercel-seo-audit https://yoursite.com
-```
+````
 
-Or install globally:
+Install globally (optional):
 
 ```bash
 npm i -g vercel-seo-audit
 vercel-seo-audit https://yoursite.com
 ```
+
+---
+
+## Example output
+
+```txt
+SEO Audit Report for https://yusufhan.dev/
+  Completed in 1118ms at 2026-01-31T12:30:54.448Z
+
+  Summary:
+    ⚠ 2 warnings
+    ℹ 1 info
+    ✔ 1 passed
+
+  ROBOTS
+  ────────────────────────────────────────
+  ⚠ [WARNING] robots.txt not found
+    → Create a robots.txt at /robots.txt
+
+  SITEMAP
+  ────────────────────────────────────────
+  ⚠ [WARNING] sitemap.xml not found
+    → Add app/sitemap.ts in Next.js App Router
+```
+
+---
 
 ## Usage
 
@@ -26,81 +68,140 @@ vercel-seo-audit https://yoursite.com
 # JSON output (pipe to jq, save to file, feed to CI)
 vercel-seo-audit https://yoursite.com --json
 
-# Verbose mode — shows raw details for every finding
+# Verbose mode — raw HTTP details for each finding
 vercel-seo-audit https://yoursite.com --verbose
 
 # Custom timeout (default: 10s)
 vercel-seo-audit https://yoursite.com --timeout 15000
 ```
 
+---
+
 ## What it checks
 
 ### Redirects
-- Redirect chains and loops on your homepage
-- HTTP → HTTPS redirect presence
-- Trailing slash consistency (catches Next.js 308 traps)
-- Meta refresh redirects in HTML
-- Redirect chains on common pages (`/about`, `/contact`, `/blog`, `/pricing`)
 
-### Robots.txt
-- Missing robots.txt
-- `Disallow: /` blocking all crawlers
-- Googlebot-specific blocks
-- Missing `Sitemap:` directive
+* Redirect chains & loops (homepage + common pages)
+* HTTP → HTTPS redirect
+* Trailing slash consistency (catches Next.js **308 traps**)
+* Meta refresh redirects (`<meta http-equiv="refresh">`)
+* Samples common routes: `/about`, `/contact`, `/blog`, `/pricing`
+
+### robots.txt
+
+* Missing robots.txt
+* `Disallow: /` (blocks everything)
+* Googlebot-specific blocks
+* Missing `Sitemap:` directive
 
 ### Sitemap
-- Missing or malformed `sitemap.xml`
-- Sitemap redirects (some crawlers won't follow)
-- Empty sitemaps
-- Broken URLs inside the sitemap (samples up to 10)
-- Sitemap index support
-- Cross-reference with robots.txt `Sitemap:` directive
+
+* Missing or malformed `sitemap.xml`
+* Sitemap redirects (some crawlers won’t follow)
+* Empty sitemap / broken URLs (samples up to 10)
+* Sitemap index support
+* Cross-check with robots.txt `Sitemap:` directive
 
 ### Metadata
-- Missing or mismatched canonical URL
-- `noindex` in meta tags and `X-Robots-Tag` header
-- Missing charset, viewport, title, description
-- Open Graph tags: `og:title`, `og:description`, `og:image`
+
+* Canonical URL presence & mismatch
+* `noindex` via meta tags **and** `X-Robots-Tag` header
+* Missing `title`, `description`, `charset`, `viewport`
+* Open Graph basics: `og:title`, `og:description`, `og:image`
 
 ### Favicon
-- Missing favicon entirely
-- `/favicon.ico` exists but no HTML `<link>` tag
-- Multiple conflicting favicon declarations
+
+* Missing favicon entirely
+* `/favicon.ico` exists but no `<link>` tag
+* Conflicting favicon declarations (multiple icons)
 
 ### Next.js / Vercel
-- Vercel deployment detection
-- Next.js 308 trailing slash behavior
-- Middleware rewrite/redirect headers
-- App Router metadata presence
 
-## Output
+* Detect Vercel deployment
+* Detect Next.js trailing slash redirect behavior
+* Middleware rewrite/redirect headers (best-effort)
+
+---
+
+## Severity & exit codes
 
 Findings are categorized by severity:
 
-| Icon | Severity | Meaning |
-|------|----------|---------|
-| `✖` | **error** | Actively hurting your SEO — fix immediately |
-| `⚠` | **warning** | Likely causing problems — should fix |
-| `ℹ` | **info** | Worth knowing, may or may not need action |
-| `✔` | **pass** | Looks good |
+| Icon | Severity    | Meaning                            |
+| ---- | ----------- | ---------------------------------- |
+| `✖`  | **error**   | Actively hurting SEO — fix now     |
+| `⚠`  | **warning** | Likely causing problems — fix soon |
+| `ℹ`  | **info**    | Useful context                     |
+| `✔`  | **pass**    | Looks good                         |
 
-## Exit codes
+Exit codes:
 
-| Code | Meaning |
-|------|---------|
-| `0` | No errors found (warnings/info don't count) |
-| `1` | One or more errors found |
-| `2` | CLI crash or invalid input |
+| Code | Meaning                                    |
+| ---- | ------------------------------------------ |
+| `0`  | No errors found (warnings/info don’t fail) |
+| `1`  | One or more errors found                   |
+| `2`  | Crash / invalid input                      |
 
-Useful for CI pipelines:
+---
 
-```bash
-vercel-seo-audit https://yoursite.com --json || echo "SEO issues found"
+## CI / GitHub Actions
+
+Fail the build only when **errors** exist:
+
+```yaml
+name: SEO Audit
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npx vercel-seo-audit https://yoursite.com --json
 ```
 
-## Requirements
+Tip: If you want warnings to fail CI too, add a `--strict` flag in roadmap (see below).
 
-Node.js >= 18 (uses native `fetch`).
+---
+
+## Roadmap
+
+* [ ] `--strict` (warnings fail with exit code 1)
+* [ ] `--pages` to customize sampled paths (`/about,/pricing`)
+* [ ] `--user-agent` presets (`googlebot`, `bingbot`)
+* [ ] `--report` to write `report.json` / `report.md`
+* [ ] GitHub Action marketplace wrapper
+
+---
+
+## FAQ
+
+**Does this replace Google Search Console?**
+No — it explains & verifies the things Search Console often reports vaguely.
+
+**Will it scan my entire site?**
+No. It checks critical endpoints + samples common pages to stay fast.
+
+**Does it work on non-Next.js sites?**
+Yes for most checks (redirects/robots/sitemap/metadata). Some checks are Next.js/Vercel-specific.
+
+---
+
+## Contributing
+
+PRs welcome. If you’re fixing a false positive, include:
+
+* the URL (or a reproducible HTML sample)
+* expected behavior
+* actual output
+
+---
 
 ## License
 
