@@ -18,7 +18,9 @@ Google Search Console often reports symptoms like:
 
 `vercel-seo-audit` turns those symptoms into **actionable fixes**.
 
-For a deeper dive into why Next.js sites often struggle with indexing, see: [Why Google Refuses to Index Your Next.js Site](https://yusufhansacak.medium.com/why-google-refuses-to-index-your-next-js-site-04a924948859) (Medium).
+For a deeper dive into why Next.js sites often struggle with indexing, see:
+- [Why Google Refuses to Index Your Next.js Site](https://dev.to/yusufhansck/why-google-refuses-to-index-your-nextjs-site-173a) (dev.to)
+- [Why Google Refuses to Index Your Next.js Site](https://yusufhansacak.medium.com/why-google-refuses-to-index-your-next-js-site-04a924948859) (Medium)
 
 ---
 
