@@ -1,0 +1,39 @@
+{
+  "name": "vercel-seo-audit",
+  "version": "0.1.0",
+  "description": "CLI tool that diagnoses SEO and indexing issues for Next.js/Vercel websites",
+  "type": "module",
+  "bin": {
+    "vercel-seo-audit": "./bin/vercel-seo-audit.mjs"
+  },
+  "main": "./dist/cli.js",
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node bin/vercel-seo-audit.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "seo",
+    "audit",
+    "vercel",
+    "nextjs",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "fast-xml-parser": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  }
+}
