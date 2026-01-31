@@ -25,7 +25,16 @@
     "nextjs",
     "cli"
   ],
+  "author": "JosephDoUrden",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JosephDoUrden/vercel-seo-audit.git"
+  },
+  "homepage": "https://github.com/JosephDoUrden/vercel-seo-audit#readme",
+  "bugs": {
+    "url": "https://github.com/JosephDoUrden/vercel-seo-audit/issues"
+  },
   "dependencies": {
     "chalk": "^5.3.0",
     "cheerio": "^1.0.0",
