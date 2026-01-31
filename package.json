@@ -4,7 +4,7 @@
   "description": "CLI tool that diagnoses SEO and indexing issues for Next.js/Vercel websites",
   "type": "module",
   "bin": {
-    "vercel-seo-audit": "./bin/vercel-seo-audit.mjs"
+    "vercel-seo-audit": "./bin/vercel-seo-audit.js"
   },
   "main": "./dist/cli.js",
   "files": [
@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "start": "node bin/vercel-seo-audit.mjs"
+    "start": "node bin/vercel-seo-audit.js"
   },
   "engines": {
     "node": ">=18.0.0"
