@@ -24,7 +24,7 @@ Google Search Console often reports symptoms like:
 
 ```bash
 npx vercel-seo-audit https://yoursite.com
-````
+```
 
 Install globally (optional):
 
