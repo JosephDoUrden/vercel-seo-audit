@@ -169,14 +169,14 @@ jobs:
           node-version: 20
       - run: npx vercel-seo-audit https://yoursite.com --json
 ```
-
-Tip: If you want warnings to fail CI too, add a `--strict` flag in roadmap (see below).
+>[!TIP]
+>If you want warnings to fail CI too, add a `--strict` or `-S` flag.
 
 ---
 
 ## Roadmap
 
-* [ ] `--strict` (warnings fail with exit code 1)
+* [x] ~~`--strict` (warnings fail with exit code 1)~~
 * [ ] `--pages` to customize sampled paths (`/about,/pricing`)
 * [ ] `--user-agent` presets (`googlebot`, `bingbot`)
 * [ ] `--report` to write `report.json` / `report.md`
