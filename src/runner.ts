@@ -4,8 +4,8 @@ import type {
   AuditModuleResult,
   AuditReport,
   FetchOptions,
-} from "./types.js";
-import { normalizeUrl } from "./utils/url.js";
+} from './types.js';
+import { normalizeUrl } from './utils/url.js';
 import {
   auditRedirects,
   auditRobots,
@@ -13,7 +13,7 @@ import {
   auditMetadata,
   auditFavicon,
   auditNextjs,
-} from "./audit/index.js";
+} from './audit/index.js';
 
 type AuditModule = {
   name: string;
@@ -21,15 +21,15 @@ type AuditModule = {
 };
 
 const phase1Modules: AuditModule[] = [
-  { name: "robots", run: auditRobots },
-  { name: "redirects", run: auditRedirects },
+  { name: 'robots', run: auditRobots },
+  { name: 'redirects', run: auditRedirects },
 ];
 
 const phase2Modules: AuditModule[] = [
-  { name: "sitemap", run: auditSitemap },
-  { name: "metadata", run: auditMetadata },
-  { name: "favicon", run: auditFavicon },
-  { name: "nextjs", run: auditNextjs },
+  { name: 'sitemap', run: auditSitemap },
+  { name: 'metadata', run: auditMetadata },
+  { name: 'favicon', run: auditFavicon },
+  { name: 'nextjs', run: auditNextjs },
 ];
 
 async function runModules(
@@ -46,14 +46,14 @@ async function runModules(
   return results
     .filter(
       (r): r is PromiseFulfilledResult<AuditModuleResult> =>
-        r.status === "fulfilled",
+        r.status === 'fulfilled',
     )
     .map((r) => r.value);
 }
 
 export async function runAudit(
   url: string,
-  opts: { verbose?: boolean; timeout?: number; strict?: boolean } = {},
+  opts: { verbose?: boolean; timeout?: number } = {},
 ): Promise<AuditReport> {
   const start = Date.now();
   const normalized = normalizeUrl(url);
@@ -67,7 +67,6 @@ export async function runAudit(
     normalizedUrl: normalized,
     fetchOptions,
     verbose: opts.verbose ?? false,
-    strict: opts.strict ?? false,
   };
 
   // Phase 1: robots + redirects (parallel)
@@ -81,10 +80,10 @@ export async function runAudit(
   // Compute summary
   const allFindings = allModules.flatMap((m) => m.findings);
   const summary = {
-    errors: allFindings.filter((f) => f.severity === "error").length,
-    warnings: allFindings.filter((f) => f.severity === "warning").length,
-    info: allFindings.filter((f) => f.severity === "info").length,
-    passed: allFindings.filter((f) => f.severity === "pass").length,
+    errors: allFindings.filter((f) => f.severity === 'error').length,
+    warnings: allFindings.filter((f) => f.severity === 'warning').length,
+    info: allFindings.filter((f) => f.severity === 'info').length,
+    passed: allFindings.filter((f) => f.severity === 'pass').length,
   };
 
   return {

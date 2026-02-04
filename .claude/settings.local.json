@@ -9,7 +9,13 @@
       "Bash(npm run build:*)",
       "Bash(chmod:*)",
       "Bash(node:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(wc:*)",
+      "Bash(npm test)"
     ]
   }
 }
