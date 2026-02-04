@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { runAudit } from './runner.js';
 import { formatReport, formatJson } from './utils/output.js';
+import { getExitCode } from './exitCode.js';
 
 const program = new Command();
 
@@ -11,8 +12,9 @@ program
   .argument('<url>', 'URL to audit (e.g. https://example.com)')
   .option('--json', 'Output results as JSON')
   .option('--verbose', 'Show detailed information for each finding')
+  .option('-S, --strict', 'Fail on any SEO issues found, including warnings')
   .option('--timeout <ms>', 'Request timeout in milliseconds', '10000')
-  .action(async (url: string, options: { json?: boolean; verbose?: boolean; timeout: string }) => {
+  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string }) => {
     const timeout = parseInt(options.timeout, 10);
     if (isNaN(timeout) || timeout <= 0) {
       console.error('Error: --timeout must be a positive number');
@@ -41,10 +43,11 @@ program
       }
 
       // Exit code based on findings
-      if (report.summary.errors > 0) {
-        process.exit(1);
+      const code = getExitCode(report.summary, options.strict ?? false);
+      if (code !== 0 && options.strict && report.summary.warnings > 0) {
+        console.error('Warnings found in strict mode');
       }
-      process.exit(0);
+      process.exit(code);
     } catch (err) {
       console.error('Fatal error:', err instanceof Error ? err.message : err);
       process.exit(2);
