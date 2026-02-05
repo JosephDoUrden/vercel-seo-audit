@@ -2,19 +2,21 @@ import { Command } from 'commander';
 import { runAudit } from './runner.js';
 import { formatReport, formatJson } from './utils/output.js';
 import { getExitCode } from './exitCode.js';
+import { parsePagesFlag } from './utils/parsePagesFlag.js';
 
 const program = new Command();
 
 program
   .name('vercel-seo-audit')
   .description('Diagnose SEO and indexing issues for Next.js/Vercel websites')
-  .version('0.1.0')
+  .version('0.2.0')
   .argument('<url>', 'URL to audit (e.g. https://example.com)')
   .option('--json', 'Output results as JSON')
   .option('--verbose', 'Show detailed information for each finding')
   .option('-S, --strict', 'Fail on any SEO issues found, including warnings')
   .option('--timeout <ms>', 'Request timeout in milliseconds', '10000')
-  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string }) => {
+  .option('--pages <paths>', 'Comma-separated page paths to check for redirects (e.g. /about,/pricing)')
+  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string }) => {
     const timeout = parseInt(options.timeout, 10);
     if (isNaN(timeout) || timeout <= 0) {
       console.error('Error: --timeout must be a positive number');
@@ -30,10 +32,21 @@ program
       process.exit(2);
     }
 
+    let pages: string[] | undefined;
+    if (options.pages) {
+      try {
+        pages = parsePagesFlag(options.pages);
+      } catch (err) {
+        console.error(`Error: ${err instanceof Error ? err.message : err}`);
+        process.exit(2);
+      }
+    }
+
     try {
       const report = await runAudit(url, {
         verbose: options.verbose,
         timeout,
+        pages,
       });
 
       if (options.json) {

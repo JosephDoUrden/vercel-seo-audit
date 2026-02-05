@@ -77,6 +77,9 @@ vercel-seo-audit https://yoursite.com --verbose
 
 # Custom timeout (default: 10s)
 vercel-seo-audit https://yoursite.com --timeout 15000
+
+# Check specific pages for redirect issues
+vercel-seo-audit https://yoursite.com --pages /docs,/team,/careers
 ```
 
 ---
@@ -89,7 +92,7 @@ vercel-seo-audit https://yoursite.com --timeout 15000
 * HTTP → HTTPS redirect
 * Trailing slash consistency (catches Next.js **308 traps**)
 * Meta refresh redirects (`<meta http-equiv="refresh">`)
-* Samples common routes: `/about`, `/contact`, `/blog`, `/pricing`
+* Samples common routes: `/about`, `/contact`, `/blog`, `/pricing` (customizable with `--pages`)
 
 ### robots.txt
 
@@ -177,7 +180,7 @@ jobs:
 ## Roadmap
 
 * [x] ~~`--strict` (warnings fail with exit code 1)~~
-* [ ] `--pages` to customize sampled paths (`/about,/pricing`)
+* [x] ~~`--pages` to customize sampled paths (`/about,/pricing`)~~
 * [ ] `--user-agent` presets (`googlebot`, `bingbot`)
 * [ ] `--report` to write `report.json` / `report.md`
 * [ ] GitHub Action marketplace wrapper
