@@ -53,7 +53,7 @@ async function runModules(
 
 export async function runAudit(
   url: string,
-  opts: { verbose?: boolean; timeout?: number } = {},
+  opts: { verbose?: boolean; timeout?: number; pages?: string[] } = {},
 ): Promise<AuditReport> {
   const start = Date.now();
   const normalized = normalizeUrl(url);
@@ -67,6 +67,7 @@ export async function runAudit(
     normalizedUrl: normalized,
     fetchOptions,
     verbose: opts.verbose ?? false,
+    pages: opts.pages,
   };
 
   // Phase 1: robots + redirects (parallel)

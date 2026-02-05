@@ -134,7 +134,8 @@ export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]>
 
   // 5. Common page redirect checks
   const origin = getOrigin(normalizedUrl);
-  for (const path of COMMON_PAGES) {
+  const pagesToCheck = ctx.pages ?? COMMON_PAGES;
+  for (const path of pagesToCheck) {
     try {
       const pageUrl = `${origin}${path}`;
       const pageChain = await followRedirectChain(pageUrl, fetchOptions);

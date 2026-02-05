@@ -108,4 +108,5 @@ export interface AuditContext {
   robotsTxt?: string;
   html?: string;
   headers?: Record<string, string>;
+  pages?: string[];
 }
