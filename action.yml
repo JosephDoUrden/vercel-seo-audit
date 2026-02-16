@@ -1,0 +1,95 @@
+name: 'Vercel SEO Audit'
+description: 'Diagnose SEO and indexing issues for Next.js/Vercel websites'
+author: 'Yusufhan Sacak'
+branding:
+  icon: 'search'
+  color: 'blue'
+
+inputs:
+  url:
+    description: 'URL to audit (e.g. https://yusufhan.dev)'
+    required: true
+  strict:
+    description: 'Fail on warnings too (exit code 1)'
+    required: false
+    default: 'false'
+  user-agent:
+    description: 'User-Agent preset (googlebot, bingbot) or custom string'
+    required: false
+  pages:
+    description: 'Comma-separated page paths to check (e.g. /docs,/team)'
+    required: false
+  report:
+    description: 'Write report to file: json or md'
+    required: false
+  timeout:
+    description: 'Request timeout in milliseconds'
+    required: false
+    default: '10000'
+  verbose:
+    description: 'Show detailed information for each finding'
+    required: false
+    default: 'false'
+
+outputs:
+  exit-code:
+    description: 'Audit exit code (0 = pass, 1 = errors found, 2 = crash)'
+    value: ${{ steps.audit.outputs.exit-code }}
+  report-path:
+    description: 'Path to report file (if --report was used)'
+    value: ${{ steps.audit.outputs.report-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Run SEO Audit
+      id: audit
+      shell: bash
+      run: |
+        args="${{ inputs.url }}"
+
+        if [ "${{ inputs.strict }}" = "true" ]; then
+          args="$args --strict"
+        fi
+
+        if [ -n "${{ inputs.user-agent }}" ]; then
+          args="$args --user-agent \"${{ inputs.user-agent }}\""
+        fi
+
+        if [ -n "${{ inputs.pages }}" ]; then
+          args="$args --pages ${{ inputs.pages }}"
+        fi
+
+        if [ -n "${{ inputs.report }}" ]; then
+          args="$args --report ${{ inputs.report }}"
+        fi
+
+        if [ "${{ inputs.timeout }}" != "10000" ]; then
+          args="$args --timeout ${{ inputs.timeout }}"
+        fi
+
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          args="$args --verbose"
+        fi
+
+        set +e
+        eval npx vercel-seo-audit@latest $args
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+        if [ -n "${{ inputs.report }}" ]; then
+          if [ "${{ inputs.report }}" = "json" ]; then
+            echo "report-path=report.json" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.report }}" = "md" ]; then
+            echo "report-path=report.md" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+        exit $EXIT_CODE
