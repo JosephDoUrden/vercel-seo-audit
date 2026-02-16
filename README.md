@@ -89,6 +89,10 @@ vercel-seo-audit https://yoursite.com --user-agent bingbot
 
 # Custom crawler user-agent
 vercel-seo-audit https://yoursite.com --user-agent "Googlebot-Image/1.0"
+
+# Write report to file (json or md)
+vercel-seo-audit https://yoursite.com --report json
+vercel-seo-audit https://yoursite.com --report md
 ```
 
 ---
@@ -191,7 +195,7 @@ jobs:
 * [x] ~~`--strict` (warnings fail with exit code 1)~~
 * [x] ~~`--pages` to customize sampled paths (`/about,/pricing`)~~
 * [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
-* [ ] `--report` to write `report.json` / `report.md`
+* [x] ~~`--report` to write `report.json` / `report.md`~~
 * [ ] GitHub Action marketplace wrapper
 
 ---

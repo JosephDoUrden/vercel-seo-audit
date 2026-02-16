@@ -1,6 +1,8 @@
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Command } from 'commander';
 import { runAudit } from './runner.js';
-import { formatReport, formatJson } from './utils/output.js';
+import { formatReport, formatJson, formatMarkdown } from './utils/output.js';
 import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { USER_AGENT_PRESETS } from './constants.js';
@@ -18,7 +20,8 @@ program
   .option('--timeout <ms>', 'Request timeout in milliseconds', '10000')
   .option('--pages <paths>', 'Comma-separated page paths to check for redirects (e.g. /about,/pricing)')
   .option('--user-agent <preset|string>', 'User-Agent for requests: googlebot, bingbot, or a custom string')
-  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string }) => {
+  .option('--report <format>', 'Write report to file: json or md')
+  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string }) => {
     const timeout = parseInt(options.timeout, 10);
     if (isNaN(timeout) || timeout <= 0) {
       console.error('Error: --timeout must be a positive number');
@@ -44,6 +47,12 @@ program
       }
     }
 
+    // Validate --report format
+    if (options.report && options.report !== 'json' && options.report !== 'md') {
+      console.error('Error: --report must be "json" or "md"');
+      process.exit(2);
+    }
+
     // Resolve user-agent preset or custom string
     let userAgent: string | undefined;
     if (options.userAgent) {
@@ -63,6 +72,15 @@ program
         console.log(formatJson(report));
       } else {
         console.log(formatReport(report, options.verbose ?? false));
+      }
+
+      // Write report file if requested
+      if (options.report) {
+        const fileName = options.report === 'json' ? 'report.json' : 'report.md';
+        const content = options.report === 'json' ? formatJson(report) : formatMarkdown(report);
+        const filePath = resolve(process.cwd(), fileName);
+        writeFileSync(filePath, content, 'utf-8');
+        console.log(`\nReport written to ${fileName}`);
       }
 
       // Exit code based on findings

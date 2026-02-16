@@ -82,3 +82,72 @@ export function formatReport(report: AuditReport, verbose: boolean): string {
 export function formatJson(report: AuditReport): string {
   return JSON.stringify(report, null, 2);
 }
+
+const severityMdIcons: Record<IssueSeverity, string> = {
+  error: '❌',
+  warning: '⚠️',
+  info: 'ℹ️',
+  pass: '✅',
+};
+
+function formatFindingMd(finding: AuditFinding): string {
+  const icon = severityMdIcons[finding.severity];
+  const lines: string[] = [];
+
+  lines.push(`- ${icon} **[${finding.severity.toUpperCase()}]** ${finding.message}`);
+  lines.push(`  - ${finding.explanation}`);
+  lines.push(`  - **Fix:** ${finding.suggestion}`);
+
+  if (finding.url) {
+    lines.push(`  - URL: \`${finding.url}\``);
+  }
+
+  return lines.join('\n');
+}
+
+export function formatMarkdown(report: AuditReport): string {
+  const lines: string[] = [];
+
+  lines.push(`# SEO Audit Report for ${report.url}`);
+  lines.push('');
+  lines.push(`> Completed in ${report.duration}ms at ${report.timestamp}`);
+  lines.push('');
+
+  // Summary
+  const { errors, warnings, info, passed } = report.summary;
+  lines.push('## Summary');
+  lines.push('');
+  lines.push('| Severity | Count |');
+  lines.push('|----------|-------|');
+  if (errors > 0) lines.push(`| ❌ Errors | ${errors} |`);
+  if (warnings > 0) lines.push(`| ⚠️ Warnings | ${warnings} |`);
+  if (info > 0) lines.push(`| ℹ️ Info | ${info} |`);
+  if (passed > 0) lines.push(`| ✅ Passed | ${passed} |`);
+  lines.push('');
+
+  // Group findings by category
+  const allFindings: AuditFinding[] = report.modules.flatMap((m) => m.findings);
+  const categories = new Map<string, AuditFinding[]>();
+
+  for (const finding of allFindings) {
+    const cat = finding.category;
+    if (!categories.has(cat)) categories.set(cat, []);
+    categories.get(cat)!.push(finding);
+  }
+
+  for (const [category, findings] of categories) {
+    lines.push(`## ${category.charAt(0).toUpperCase() + category.slice(1)}`);
+    lines.push('');
+    for (const finding of findings) {
+      lines.push(formatFindingMd(finding));
+    }
+    lines.push('');
+  }
+
+  if (allFindings.length === 0) {
+    lines.push('**No issues found!**');
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
