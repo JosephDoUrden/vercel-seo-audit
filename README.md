@@ -27,14 +27,14 @@ For a deeper dive into why Next.js sites often struggle with indexing, see:
 ## Quick start
 
 ```bash
-npx vercel-seo-audit https://yoursite.com
+npx vercel-seo-audit https://yusufhan.dev
 ```
 
 Install globally (optional):
 
 ```bash
 npm i -g vercel-seo-audit
-vercel-seo-audit https://yoursite.com
+vercel-seo-audit https://yusufhan.dev
 ```
 
 ---
@@ -67,32 +67,32 @@ SEO Audit Report for https://yusufhan.dev/
 
 ```bash
 # Basic audit
-vercel-seo-audit https://yoursite.com
+vercel-seo-audit https://yusufhan.dev
 
 # JSON output (pipe to jq, save to file, feed to CI)
-vercel-seo-audit https://yoursite.com --json
+vercel-seo-audit https://yusufhan.dev --json
 
 # Verbose mode — raw HTTP details for each finding
-vercel-seo-audit https://yoursite.com --verbose
+vercel-seo-audit https://yusufhan.dev --verbose
 
 # Custom timeout (default: 10s)
-vercel-seo-audit https://yoursite.com --timeout 15000
+vercel-seo-audit https://yusufhan.dev --timeout 15000
 
 # Check specific pages for redirect issues
-vercel-seo-audit https://yoursite.com --pages /docs,/team,/careers
+vercel-seo-audit https://yusufhan.dev --pages /docs,/team,/careers
 
 # Audit as Googlebot
-vercel-seo-audit https://yoursite.com --user-agent googlebot
+vercel-seo-audit https://yusufhan.dev --user-agent googlebot
 
 # Audit as Bingbot
-vercel-seo-audit https://yoursite.com --user-agent bingbot
+vercel-seo-audit https://yusufhan.dev --user-agent bingbot
 
 # Custom crawler user-agent
-vercel-seo-audit https://yoursite.com --user-agent "Googlebot-Image/1.0"
+vercel-seo-audit https://yusufhan.dev --user-agent "Googlebot-Image/1.0"
 
 # Write report to file (json or md)
-vercel-seo-audit https://yoursite.com --report json
-vercel-seo-audit https://yoursite.com --report md
+vercel-seo-audit https://yusufhan.dev --report json
+vercel-seo-audit https://yusufhan.dev --report md
 ```
 
 ---
@@ -166,12 +166,44 @@ Exit codes:
 
 ## CI / GitHub Actions
 
-Fail the build only when **errors** exist:
+### Using the GitHub Action
 
 ```yaml
 name: SEO Audit
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: JosephDoUrden/vercel-seo-audit@v1
+        with:
+          url: https://yusufhan.dev
+          strict: true
+          report: json
+```
+
+All inputs:
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `url` | yes | — | URL to audit |
+| `strict` | no | `false` | Fail on warnings too |
+| `user-agent` | no | — | `googlebot`, `bingbot`, or custom string |
+| `pages` | no | — | Comma-separated page paths |
+| `report` | no | — | Write report file: `json` or `md` |
+| `timeout` | no | `10000` | Request timeout in ms |
+| `verbose` | no | `false` | Show detailed output |
+
+Outputs: `exit-code`, `report-path`
+
+### Using npx directly
+
+```yaml
+name: SEO Audit
+on:
   push:
     branches: [main]
 
@@ -183,8 +215,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npx vercel-seo-audit https://yoursite.com --json
+      - run: npx vercel-seo-audit https://yusufhan.dev --json
 ```
+
 >[!TIP]
 >If you want warnings to fail CI too, add a `--strict` or `-S` flag.
 
@@ -196,7 +229,7 @@ jobs:
 * [x] ~~`--pages` to customize sampled paths (`/about,/pricing`)~~
 * [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
 * [x] ~~`--report` to write `report.json` / `report.md`~~
-* [ ] GitHub Action marketplace wrapper
+* [x] ~~GitHub Action marketplace wrapper~~
 
 ---
 

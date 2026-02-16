@@ -13,7 +13,7 @@ program
   .name('vercel-seo-audit')
   .description('Diagnose SEO and indexing issues for Next.js/Vercel websites')
   .version('0.4.0')
-  .argument('<url>', 'URL to audit (e.g. https://example.com)')
+  .argument('<url>', 'URL to audit (e.g. https://yusufhan.dev)')
   .option('--json', 'Output results as JSON')
   .option('--verbose', 'Show detailed information for each finding')
   .option('-S, --strict', 'Fail on any SEO issues found, including warnings')
