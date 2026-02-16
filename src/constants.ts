@@ -1,6 +1,6 @@
 export const DEFAULT_TIMEOUT = 10_000;
 export const MAX_REDIRECTS = 20;
-export const USER_AGENT = 'vercel-seo-audit/0.4.0';
+export const USER_AGENT = 'vercel-seo-audit/0.5.0';
 export const SITEMAP_SAMPLE_SIZE = 10;
 
 export const COMMON_PAGES = ['/about', '/contact', '/blog', '/pricing'];
