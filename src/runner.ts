@@ -53,13 +53,14 @@ async function runModules(
 
 export async function runAudit(
   url: string,
-  opts: { verbose?: boolean; timeout?: number; pages?: string[] } = {},
+  opts: { verbose?: boolean; timeout?: number; pages?: string[]; userAgent?: string } = {},
 ): Promise<AuditReport> {
   const start = Date.now();
   const normalized = normalizeUrl(url);
 
   const fetchOptions: FetchOptions = {
     timeout: opts.timeout,
+    userAgent: opts.userAgent,
   };
 
   const ctx: AuditContext = {

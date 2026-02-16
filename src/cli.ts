@@ -3,20 +3,22 @@ import { runAudit } from './runner.js';
 import { formatReport, formatJson } from './utils/output.js';
 import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
+import { USER_AGENT_PRESETS } from './constants.js';
 
 const program = new Command();
 
 program
   .name('vercel-seo-audit')
   .description('Diagnose SEO and indexing issues for Next.js/Vercel websites')
-  .version('0.2.0')
+  .version('0.3.0')
   .argument('<url>', 'URL to audit (e.g. https://example.com)')
   .option('--json', 'Output results as JSON')
   .option('--verbose', 'Show detailed information for each finding')
   .option('-S, --strict', 'Fail on any SEO issues found, including warnings')
   .option('--timeout <ms>', 'Request timeout in milliseconds', '10000')
   .option('--pages <paths>', 'Comma-separated page paths to check for redirects (e.g. /about,/pricing)')
-  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string }) => {
+  .option('--user-agent <preset|string>', 'User-Agent for requests: googlebot, bingbot, or a custom string')
+  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string }) => {
     const timeout = parseInt(options.timeout, 10);
     if (isNaN(timeout) || timeout <= 0) {
       console.error('Error: --timeout must be a positive number');
@@ -42,11 +44,19 @@ program
       }
     }
 
+    // Resolve user-agent preset or custom string
+    let userAgent: string | undefined;
+    if (options.userAgent) {
+      const lower = options.userAgent.toLowerCase();
+      userAgent = USER_AGENT_PRESETS[lower] ?? options.userAgent;
+    }
+
     try {
       const report = await runAudit(url, {
         verbose: options.verbose,
         timeout,
         pages,
+        userAgent,
       });
 
       if (options.json) {
