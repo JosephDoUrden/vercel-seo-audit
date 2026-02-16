@@ -230,6 +230,12 @@ jobs:
 * [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
 * [x] ~~`--report` to write `report.json` / `report.md`~~
 * [x] ~~GitHub Action marketplace wrapper~~
+* [ ] `--diff` to compare two audit runs and detect regressions
+* [ ] Structured data / JSON-LD validation
+* [ ] `--crawl` mode to audit all pages from sitemap
+* [ ] i18n / `hreflang` validation
+* [ ] Image SEO checks (missing `alt`, `next/image`, lazy loading)
+* [ ] Config file (`.seoauditrc.json`) for project-level defaults
 
 ---
 
