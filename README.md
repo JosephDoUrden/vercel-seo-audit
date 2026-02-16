@@ -80,6 +80,15 @@ vercel-seo-audit https://yoursite.com --timeout 15000
 
 # Check specific pages for redirect issues
 vercel-seo-audit https://yoursite.com --pages /docs,/team,/careers
+
+# Audit as Googlebot
+vercel-seo-audit https://yoursite.com --user-agent googlebot
+
+# Audit as Bingbot
+vercel-seo-audit https://yoursite.com --user-agent bingbot
+
+# Custom crawler user-agent
+vercel-seo-audit https://yoursite.com --user-agent "Googlebot-Image/1.0"
 ```
 
 ---
@@ -181,7 +190,7 @@ jobs:
 
 * [x] ~~`--strict` (warnings fail with exit code 1)~~
 * [x] ~~`--pages` to customize sampled paths (`/about,/pricing`)~~
-* [ ] `--user-agent` presets (`googlebot`, `bingbot`)
+* [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
 * [ ] `--report` to write `report.json` / `report.md`
 * [ ] GitHub Action marketplace wrapper
 
