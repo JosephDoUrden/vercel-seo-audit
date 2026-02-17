@@ -9,7 +9,8 @@ export type IssueCategory =
   | 'robots'
   | 'nextjs'
   | 'structured-data'
-  | 'crawl';
+  | 'crawl'
+  | 'i18n';
 
 export type IssueCode =
   // Redirect issues
@@ -68,7 +69,14 @@ export type IssueCode =
   | 'CRAWL_PAGE_DESCRIPTION_MISSING'
   | 'CRAWL_PAGE_CANONICAL_MISSING'
   | 'CRAWL_PAGE_CANONICAL_MISMATCH'
-  | 'CRAWL_PAGE_JSONLD_MISSING';
+  | 'CRAWL_PAGE_JSONLD_MISSING'
+  // i18n / hreflang issues
+  | 'HREFLANG_MISSING'
+  | 'HREFLANG_INVALID_LANG'
+  | 'HREFLANG_MISSING_SELF'
+  | 'HREFLANG_MISSING_XDEFAULT'
+  | 'HREFLANG_MISSING_RECIPROCAL'
+  | 'HREFLANG_DUPLICATE';
 
 export interface AuditFinding {
   code: IssueCode;
