@@ -93,6 +93,12 @@ vercel-seo-audit https://yusufhan.dev --user-agent "Googlebot-Image/1.0"
 # Write report to file (json or md)
 vercel-seo-audit https://yusufhan.dev --report json
 vercel-seo-audit https://yusufhan.dev --report md
+
+# Compare against a previous report to detect regressions
+vercel-seo-audit https://yusufhan.dev --diff previous-report.json
+
+# Diff with JSON output
+vercel-seo-audit https://yusufhan.dev --diff previous-report.json --json
 ```
 
 ---
@@ -230,7 +236,7 @@ jobs:
 * [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
 * [x] ~~`--report` to write `report.json` / `report.md`~~
 * [x] ~~GitHub Action marketplace wrapper~~
-* [ ] `--diff` to compare two audit runs and detect regressions
+* [x] ~~`--diff` to compare two audit runs and detect regressions~~
 * [ ] Structured data / JSON-LD validation
 * [ ] `--crawl` mode to audit all pages from sitemap
 * [ ] i18n / `hreflang` validation
