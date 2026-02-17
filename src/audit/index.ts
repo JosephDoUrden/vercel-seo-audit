@@ -5,3 +5,4 @@ export { auditMetadata } from './metadata.js';
 export { auditFavicon } from './favicon.js';
 export { auditNextjs } from './nextjs.js';
 export { auditStructuredData } from './structuredData.js';
+export { auditCrawl } from './crawl.js';

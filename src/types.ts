@@ -8,7 +8,8 @@ export type IssueCategory =
   | 'sitemap'
   | 'robots'
   | 'nextjs'
-  | 'structured-data';
+  | 'structured-data'
+  | 'crawl';
 
 export type IssueCode =
   // Redirect issues
@@ -59,7 +60,15 @@ export type IssueCode =
   | 'JSONLD_INVALID_JSON'
   | 'JSONLD_MISSING_CONTEXT'
   | 'JSONLD_MISSING_TYPE'
-  | 'JSONLD_EMPTY_FIELDS';
+  | 'JSONLD_EMPTY_FIELDS'
+  // Crawl issues
+  | 'CRAWL_PAGE_ERROR'
+  | 'CRAWL_PAGE_NOINDEX'
+  | 'CRAWL_PAGE_TITLE_MISSING'
+  | 'CRAWL_PAGE_DESCRIPTION_MISSING'
+  | 'CRAWL_PAGE_CANONICAL_MISSING'
+  | 'CRAWL_PAGE_CANONICAL_MISMATCH'
+  | 'CRAWL_PAGE_JSONLD_MISSING';
 
 export interface AuditFinding {
   code: IssueCode;
@@ -122,4 +131,6 @@ export interface AuditContext {
   html?: string;
   headers?: Record<string, string>;
   pages?: string[];
+  sitemapUrls?: string[];
+  crawlLimit?: number;
 }

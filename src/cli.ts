@@ -5,7 +5,7 @@ import { runAudit } from './runner.js';
 import { formatReport, formatJson, formatMarkdown, formatDiff, formatDiffJson } from './utils/output.js';
 import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
-import { USER_AGENT_PRESETS } from './constants.js';
+import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT } from './constants.js';
 import type { AuditFinding, AuditReport, DiffResult } from './types.js';
 
 const program = new Command();
@@ -22,8 +22,9 @@ program
   .option('--pages <paths>', 'Comma-separated page paths to check for redirects (e.g. /about,/pricing)')
   .option('--user-agent <preset|string>', 'User-Agent for requests: googlebot, bingbot, or a custom string')
   .option('--report <format>', 'Write report to file: json or md')
+  .option('--crawl [limit]', 'Crawl sitemap URLs and audit each page (default: 50)')
   .option('--diff <path>', 'Compare against a previous report.json')
-  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; diff?: string }) => {
+  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string }) => {
     const timeout = parseInt(options.timeout, 10);
     if (isNaN(timeout) || timeout <= 0) {
       console.error('Error: --timeout must be a positive number');
@@ -55,6 +56,16 @@ program
       process.exit(2);
     }
 
+    // Parse --crawl option
+    let crawl: number | undefined;
+    if (options.crawl !== undefined) {
+      crawl = options.crawl === true ? DEFAULT_CRAWL_LIMIT : parseInt(String(options.crawl), 10);
+      if (isNaN(crawl) || crawl <= 0) {
+        console.error('Error: --crawl must be a positive number');
+        process.exit(2);
+      }
+    }
+
     // Resolve user-agent preset or custom string
     let userAgent: string | undefined;
     if (options.userAgent) {
@@ -68,6 +79,7 @@ program
         timeout,
         pages,
         userAgent,
+        crawl,
       });
 
       if (options.json) {
