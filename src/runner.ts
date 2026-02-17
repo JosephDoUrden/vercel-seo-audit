@@ -14,6 +14,7 @@ import {
   auditFavicon,
   auditNextjs,
   auditStructuredData,
+  auditCrawl,
 } from './audit/index.js';
 
 type AuditModule = {
@@ -55,7 +56,7 @@ async function runModules(
 
 export async function runAudit(
   url: string,
-  opts: { verbose?: boolean; timeout?: number; pages?: string[]; userAgent?: string } = {},
+  opts: { verbose?: boolean; timeout?: number; pages?: string[]; userAgent?: string; crawl?: number } = {},
 ): Promise<AuditReport> {
   const start = Date.now();
   const normalized = normalizeUrl(url);
@@ -71,6 +72,7 @@ export async function runAudit(
     fetchOptions,
     verbose: opts.verbose ?? false,
     pages: opts.pages,
+    crawlLimit: opts.crawl,
   };
 
   // Phase 1: robots + redirects (parallel)
@@ -80,6 +82,12 @@ export async function runAudit(
   const phase2Results = await runModules(phase2Modules, ctx);
 
   const allModules = [...phase1Results, ...phase2Results];
+
+  // Phase 3: crawl (only when --crawl is set)
+  if (opts.crawl !== undefined) {
+    const crawlResults = await runModules([{ name: 'crawl', run: auditCrawl }], ctx);
+    allModules.push(...crawlResults);
+  }
 
   // Compute summary
   const allFindings = allModules.flatMap((m) => m.findings);
