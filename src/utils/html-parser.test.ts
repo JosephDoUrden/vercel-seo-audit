@@ -9,6 +9,7 @@ import {
   getTitle,
   getFaviconLinks,
   getHreflangLinks,
+  getImages,
 } from './html-parser.js';
 
 function html(head: string): string {
@@ -264,5 +265,69 @@ describe('getHreflangLinks', () => {
   it('skips links without href', () => {
     const links = getHreflangLinks(html('<link rel="alternate" hreflang="en">'));
     expect(links).toHaveLength(0);
+  });
+});
+
+function body(content: string): string {
+  return `<html><head></head><body>${content}</body></html>`;
+}
+
+describe('getImages', () => {
+  it('extracts basic image info', () => {
+    const images = getImages(body('<img src="/photo.jpg" alt="A photo">'));
+    expect(images).toHaveLength(1);
+    expect(images[0]).toEqual({
+      src: '/photo.jpg',
+      alt: 'A photo',
+      hasAlt: true,
+      width: null,
+      height: null,
+      loading: null,
+      isNextImage: false,
+    });
+  });
+
+  it('detects missing alt attribute', () => {
+    const images = getImages(body('<img src="/photo.jpg">'));
+    expect(images[0].alt).toBeNull();
+    expect(images[0].hasAlt).toBe(false);
+  });
+
+  it('detects empty alt attribute', () => {
+    const images = getImages(body('<img src="/decorative.png" alt="">'));
+    expect(images[0].alt).toBe('');
+    expect(images[0].hasAlt).toBe(true);
+  });
+
+  it('extracts width and height', () => {
+    const images = getImages(body('<img src="/photo.jpg" alt="test" width="200" height="150">'));
+    expect(images[0].width).toBe('200');
+    expect(images[0].height).toBe('150');
+  });
+
+  it('detects next/image via data-nimg attribute', () => {
+    const images = getImages(body('<img src="/photo.jpg" alt="test" data-nimg="1">'));
+    expect(images[0].isNextImage).toBe(true);
+  });
+
+  it('extracts loading attribute', () => {
+    const images = getImages(body('<img src="/photo.jpg" alt="test" loading="lazy">'));
+    expect(images[0].loading).toBe('lazy');
+  });
+
+  it('returns empty array when no images', () => {
+    expect(getImages(body('<p>No images here</p>'))).toHaveLength(0);
+  });
+
+  it('handles multiple images', () => {
+    const images = getImages(body('<img src="/a.jpg" alt="A"><img src="/b.jpg" alt="B">'));
+    expect(images).toHaveLength(2);
+    expect(images[0].src).toBe('/a.jpg');
+    expect(images[1].src).toBe('/b.jpg');
+  });
+
+  it('skips images without src', () => {
+    const images = getImages(body('<img alt="no src">'));
+    expect(images).toHaveLength(0);
   });
 });

@@ -10,7 +10,8 @@ export type IssueCategory =
   | 'nextjs'
   | 'structured-data'
   | 'crawl'
-  | 'i18n';
+  | 'i18n'
+  | 'images';
 
 export type IssueCode =
   // Redirect issues
@@ -76,7 +77,14 @@ export type IssueCode =
   | 'HREFLANG_MISSING_SELF'
   | 'HREFLANG_MISSING_XDEFAULT'
   | 'HREFLANG_MISSING_RECIPROCAL'
-  | 'HREFLANG_DUPLICATE';
+  | 'HREFLANG_DUPLICATE'
+  // Image issues
+  | 'IMG_MISSING_ALT'
+  | 'IMG_EMPTY_ALT'
+  | 'IMG_NO_NEXT_IMAGE'
+  | 'IMG_NO_LAZY_LOADING'
+  | 'IMG_LARGE_FILE'
+  | 'IMG_MISSING_DIMENSIONS';
 
 export interface AuditFinding {
   code: IssueCode;
