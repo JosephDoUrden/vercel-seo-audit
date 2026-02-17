@@ -86,6 +86,41 @@ export interface HreflangLink {
   href: string;
 }
 
+export interface ImageInfo {
+  src: string;
+  alt: string | null;
+  hasAlt: boolean;
+  width: string | null;
+  height: string | null;
+  loading: string | null;
+  isNextImage: boolean;
+}
+
+export function getImages(html: string): ImageInfo[] {
+  const $ = cheerio.load(html);
+  const images: ImageInfo[] = [];
+
+  $('img').each((_, el) => {
+    const src = $(el).attr('src');
+    if (!src) return;
+
+    const altAttr = $(el).attr('alt');
+    const hasAlt = altAttr !== undefined;
+
+    images.push({
+      src,
+      alt: hasAlt ? altAttr! : null,
+      hasAlt,
+      width: $(el).attr('width') ?? null,
+      height: $(el).attr('height') ?? null,
+      loading: $(el).attr('loading') ?? null,
+      isNextImage: $(el).attr('data-nimg') !== undefined,
+    });
+  });
+
+  return images;
+}
+
 export function getHreflangLinks(html: string): HreflangLink[] {
   const $ = cheerio.load(html);
   const links: HreflangLink[] = [];
