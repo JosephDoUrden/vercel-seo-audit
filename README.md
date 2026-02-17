@@ -141,6 +141,13 @@ vercel-seo-audit https://yusufhan.dev --diff previous-report.json --json
 * `/favicon.ico` exists but no `<link>` tag
 * Conflicting favicon declarations (multiple icons)
 
+### Structured Data
+
+* Missing JSON-LD blocks entirely
+* Invalid JSON syntax in `<script type="application/ld+json">`
+* Missing `@context` or `@type` properties
+* Missing required fields for known types (Article, FAQPage, Product, Organization, etc.)
+
 ### Next.js / Vercel
 
 * Detect Vercel deployment
@@ -237,7 +244,7 @@ jobs:
 * [x] ~~`--report` to write `report.json` / `report.md`~~
 * [x] ~~GitHub Action marketplace wrapper~~
 * [x] ~~`--diff` to compare two audit runs and detect regressions~~
-* [ ] Structured data / JSON-LD validation
+* [x] ~~Structured data / JSON-LD validation~~
 * [ ] `--crawl` mode to audit all pages from sitemap
 * [ ] i18n / `hreflang` validation
 * [ ] Image SEO checks (missing `alt`, `next/image`, lazy loading)

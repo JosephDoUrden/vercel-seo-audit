@@ -4,3 +4,4 @@ export { auditSitemap } from './sitemap.js';
 export { auditMetadata } from './metadata.js';
 export { auditFavicon } from './favicon.js';
 export { auditNextjs } from './nextjs.js';
+export { auditStructuredData } from './structuredData.js';

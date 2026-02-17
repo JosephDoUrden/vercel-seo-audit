@@ -7,7 +7,8 @@ export type IssueCategory =
   | 'favicon'
   | 'sitemap'
   | 'robots'
-  | 'nextjs';
+  | 'nextjs'
+  | 'structured-data';
 
 export type IssueCode =
   // Redirect issues
@@ -52,7 +53,13 @@ export type IssueCode =
   | 'VERCEL_DETECTED'
   | 'NEXTJS_TRAILING_SLASH_308'
   | 'MIDDLEWARE_REDIRECT'
-  | 'APP_ROUTER_METADATA';
+  | 'APP_ROUTER_METADATA'
+  // Structured data issues
+  | 'JSONLD_MISSING'
+  | 'JSONLD_INVALID_JSON'
+  | 'JSONLD_MISSING_CONTEXT'
+  | 'JSONLD_MISSING_TYPE'
+  | 'JSONLD_EMPTY_FIELDS';
 
 export interface AuditFinding {
   code: IssueCode;
