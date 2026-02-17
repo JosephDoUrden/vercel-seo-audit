@@ -19,7 +19,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm run test:coverage
-      - run: npm publish --provenance --access public
+      - run: npm test
+      - name: Publish to npm
+        if: env.NODE_AUTH_TOKEN != ''
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Skip publish (no token)
+        if: env.NODE_AUTH_TOKEN == ''
+        run: echo "::warning::NPM_TOKEN secret not set — skipping npm publish."
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

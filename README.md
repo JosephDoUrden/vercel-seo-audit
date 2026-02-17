@@ -344,6 +344,18 @@ If you're reporting a false positive, include:
 
 ---
 
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please).
+Merge conventional commits to `main` and release-please opens a release PR that
+bumps the version and updates `CHANGELOG.md`. Merging that PR creates a GitHub
+Release, which triggers npm publish automatically.
+
+See [docs/RELEASING.md](./docs/RELEASING.md) for the full process, commit
+message format, and required secrets.
+
+---
+
 ## Licence
 
 [MIT](./LICENSE)
