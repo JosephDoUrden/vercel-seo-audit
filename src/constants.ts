@@ -12,6 +12,9 @@ export const USER_AGENT_PRESETS: Record<string, string> = {
     'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)',
 };
 
+export const DEFAULT_CRAWL_LIMIT = 50;
+export const CRAWL_CONCURRENCY = 5;
+
 export const DEFAULT_PATHS = {
   robotsTxt: '/robots.txt',
   sitemapXml: '/sitemap.xml',

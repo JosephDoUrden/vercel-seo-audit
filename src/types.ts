@@ -7,7 +7,10 @@ export type IssueCategory =
   | 'favicon'
   | 'sitemap'
   | 'robots'
-  | 'nextjs';
+  | 'nextjs'
+  | 'structured-data'
+  | 'crawl'
+  | 'i18n';
 
 export type IssueCode =
   // Redirect issues
@@ -52,7 +55,28 @@ export type IssueCode =
   | 'VERCEL_DETECTED'
   | 'NEXTJS_TRAILING_SLASH_308'
   | 'MIDDLEWARE_REDIRECT'
-  | 'APP_ROUTER_METADATA';
+  | 'APP_ROUTER_METADATA'
+  // Structured data issues
+  | 'JSONLD_MISSING'
+  | 'JSONLD_INVALID_JSON'
+  | 'JSONLD_MISSING_CONTEXT'
+  | 'JSONLD_MISSING_TYPE'
+  | 'JSONLD_EMPTY_FIELDS'
+  // Crawl issues
+  | 'CRAWL_PAGE_ERROR'
+  | 'CRAWL_PAGE_NOINDEX'
+  | 'CRAWL_PAGE_TITLE_MISSING'
+  | 'CRAWL_PAGE_DESCRIPTION_MISSING'
+  | 'CRAWL_PAGE_CANONICAL_MISSING'
+  | 'CRAWL_PAGE_CANONICAL_MISMATCH'
+  | 'CRAWL_PAGE_JSONLD_MISSING'
+  // i18n / hreflang issues
+  | 'HREFLANG_MISSING'
+  | 'HREFLANG_INVALID_LANG'
+  | 'HREFLANG_MISSING_SELF'
+  | 'HREFLANG_MISSING_XDEFAULT'
+  | 'HREFLANG_MISSING_RECIPROCAL'
+  | 'HREFLANG_DUPLICATE';
 
 export interface AuditFinding {
   code: IssueCode;
@@ -115,4 +139,6 @@ export interface AuditContext {
   html?: string;
   headers?: Record<string, string>;
   pages?: string[];
+  sitemapUrls?: string[];
+  crawlLimit?: number;
 }

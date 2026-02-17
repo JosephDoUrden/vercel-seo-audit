@@ -77,6 +77,23 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
 
   // 3. Handle sitemap index
   if (parsed.type === 'sitemapindex') {
+    // Resolve child sitemaps and collect all URLs for crawl mode
+    const allUrls: string[] = [];
+    for (const childUrl of parsed.sitemaps) {
+      try {
+        const childRes = await fetchPage(childUrl, ctx.fetchOptions);
+        if (childRes.status === 200) {
+          const childParsed = parseSitemapXml(childRes.body);
+          if (childParsed.type === 'urlset') {
+            allUrls.push(...childParsed.urls.map((u) => u.loc));
+          }
+        }
+      } catch {
+        // Skip unreachable child sitemaps
+      }
+    }
+    ctx.sitemapUrls = allUrls;
+
     findings.push({
       code: 'SITEMAP_MISSING',
       severity: 'pass',
@@ -103,6 +120,9 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
     });
     return findings;
   }
+
+  // Store URLs for crawl mode
+  ctx.sitemapUrls = parsed.urls.map((u) => u.loc);
 
   // 5. Sample URLs for status checks
   const sample = parsed.urls.slice(0, SITEMAP_SAMPLE_SIZE);

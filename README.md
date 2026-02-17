@@ -99,6 +99,12 @@ vercel-seo-audit https://yusufhan.dev --diff previous-report.json
 
 # Diff with JSON output
 vercel-seo-audit https://yusufhan.dev --diff previous-report.json --json
+
+# Crawl all sitemap URLs and audit each page (default: 50 pages)
+vercel-seo-audit https://yusufhan.dev --crawl
+
+# Crawl with a custom limit
+vercel-seo-audit https://yusufhan.dev --crawl 100
 ```
 
 ---
@@ -140,6 +146,35 @@ vercel-seo-audit https://yusufhan.dev --diff previous-report.json --json
 * Missing favicon entirely
 * `/favicon.ico` exists but no `<link>` tag
 * Conflicting favicon declarations (multiple icons)
+
+### Structured Data
+
+* Missing JSON-LD blocks entirely
+* Invalid JSON syntax in `<script type="application/ld+json">`
+* Missing `@context` or `@type` properties
+* Missing required fields for known types (Article, FAQPage, Product, Organization, etc.)
+
+### Crawl Mode (`--crawl`)
+
+When `--crawl` is enabled, every URL from the sitemap is fetched and audited for:
+
+* Non-2xx status codes (broken pages)
+* `noindex` directives (meta tag or `X-Robots-Tag` header)
+* Missing `<title>` tag
+* Missing meta description
+* Missing or mismatched canonical URL
+* Missing JSON-LD structured data
+
+Progress is printed to stderr as each page is crawled.
+
+### Internationalization (hreflang)
+
+* Missing hreflang tags entirely (informational for single-language sites)
+* Invalid language/region codes
+* Missing self-referencing hreflang entry
+* Missing `x-default` fallback
+* Duplicate hreflang values
+* Missing reciprocal links (page A→B but B doesn't→A)
 
 ### Next.js / Vercel
 
@@ -200,6 +235,7 @@ All inputs:
 | `user-agent` | no | — | `googlebot`, `bingbot`, or custom string |
 | `pages` | no | — | Comma-separated page paths |
 | `report` | no | — | Write report file: `json` or `md` |
+| `crawl` | no | — | Crawl sitemap URLs (number = page limit, default 50) |
 | `timeout` | no | `10000` | Request timeout in ms |
 | `verbose` | no | `false` | Show detailed output |
 
@@ -237,9 +273,9 @@ jobs:
 * [x] ~~`--report` to write `report.json` / `report.md`~~
 * [x] ~~GitHub Action marketplace wrapper~~
 * [x] ~~`--diff` to compare two audit runs and detect regressions~~
-* [ ] Structured data / JSON-LD validation
-* [ ] `--crawl` mode to audit all pages from sitemap
-* [ ] i18n / `hreflang` validation
+* [x] ~~Structured data / JSON-LD validation~~
+* [x] ~~`--crawl` mode to audit all pages from sitemap~~
+* [x] ~~i18n / `hreflang` validation~~
 * [ ] Image SEO checks (missing `alt`, `next/image`, lazy loading)
 * [ ] Config file (`.seoauditrc.json`) for project-level defaults
 
