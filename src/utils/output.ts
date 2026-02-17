@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { AuditFinding, AuditReport, IssueSeverity } from '../types.js';
+import type { AuditFinding, AuditReport, DiffResult, IssueSeverity } from '../types.js';
 
 const severityColors: Record<IssueSeverity, (text: string) => string> = {
   error: chalk.red,
@@ -150,4 +150,41 @@ export function formatMarkdown(report: AuditReport): string {
   }
 
   return lines.join('\n');
+}
+
+export function formatDiff(diff: DiffResult): string {
+  const lines: string[] = [];
+
+  lines.push('');
+  lines.push(chalk.bold.underline('Diff against previous report'));
+  lines.push('');
+  lines.push(
+    `  ${chalk.green(`+ ${diff.newIssues.length} new`)}  ` +
+    `${chalk.red(`- ${diff.resolvedIssues.length} resolved`)}  ` +
+    `${chalk.dim(`= ${diff.unchanged.length} unchanged`)}`
+  );
+  lines.push('');
+
+  if (diff.newIssues.length > 0) {
+    lines.push(chalk.green.bold('  New issues:'));
+    for (const f of diff.newIssues) {
+      const color = severityColors[f.severity];
+      lines.push(color(`    + [${f.severity.toUpperCase()}] ${f.message}${f.url ? ` (${f.url})` : ''}`));
+    }
+    lines.push('');
+  }
+
+  if (diff.resolvedIssues.length > 0) {
+    lines.push(chalk.red.bold('  Resolved issues:'));
+    for (const f of diff.resolvedIssues) {
+      lines.push(chalk.dim(`    - [${f.severity.toUpperCase()}] ${f.message}${f.url ? ` (${f.url})` : ''}`));
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+export function formatDiffJson(diff: DiffResult): string {
+  return JSON.stringify(diff, null, 2);
 }

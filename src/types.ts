@@ -83,6 +83,12 @@ export interface AuditReport {
   modules: AuditModuleResult[];
 }
 
+export interface DiffResult {
+  newIssues: AuditFinding[];
+  resolvedIssues: AuditFinding[];
+  unchanged: AuditFinding[];
+}
+
 export interface RedirectHop {
   url: string;
   status: number;
