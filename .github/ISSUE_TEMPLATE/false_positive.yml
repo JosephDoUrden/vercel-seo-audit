@@ -1,0 +1,43 @@
+name: False positive
+description: Report an incorrect or misleading finding
+labels: [false-positive, bug]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: URL audited
+      description: The URL that triggers the incorrect finding.
+      placeholder: https://example.com
+    validations:
+      required: true
+  - type: input
+    id: finding-code
+    attributes:
+      label: Finding code
+      description: "The issue code reported (e.g. `CANONICAL_MISMATCH`, `REDIRECT_CHAIN`)."
+      placeholder: CANONICAL_MISMATCH
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Tool output
+      description: Paste the relevant section of the CLI output.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: why-incorrect
+    attributes:
+      label: Why this is incorrect
+      description: Explain why the finding is wrong. Include evidence (e.g. curl output, HTML snippet, Search Console data).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Output of `npx vercel-seo-audit --version`"
+      placeholder: "0.5.0"
+    validations:
+      required: true

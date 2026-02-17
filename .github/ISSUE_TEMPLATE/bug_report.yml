@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a crash, incorrect behaviour, or unexpected output
+labels: [bug, needs-repro]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what went wrong.
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: URL audited
+      description: The URL you ran the tool against (or "N/A" if not applicable).
+      placeholder: https://example.com
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command used
+      description: The exact command you ran.
+      placeholder: npx vercel-seo-audit https://example.com --verbose
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Actual output
+      description: Paste the full CLI output (use a code block).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What you expected to happen instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Output of `npx vercel-seo-audit --version`"
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      description: "Output of `node -v`"
+      placeholder: "v20.11.0"
+    validations:
+      required: true

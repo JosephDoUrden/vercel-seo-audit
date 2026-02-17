@@ -16,7 +16,9 @@
     "start": "node bin/vercel-seo-audit.js",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
   },
   "engines": {
     "node": ">=18.0.0"
