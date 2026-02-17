@@ -167,6 +167,15 @@ When `--crawl` is enabled, every URL from the sitemap is fetched and audited for
 
 Progress is printed to stderr as each page is crawled.
 
+### Internationalization (hreflang)
+
+* Missing hreflang tags entirely (informational for single-language sites)
+* Invalid language/region codes
+* Missing self-referencing hreflang entry
+* Missing `x-default` fallback
+* Duplicate hreflang values
+* Missing reciprocal links (page A→B but B doesn't→A)
+
 ### Next.js / Vercel
 
 * Detect Vercel deployment
@@ -266,7 +275,7 @@ jobs:
 * [x] ~~`--diff` to compare two audit runs and detect regressions~~
 * [x] ~~Structured data / JSON-LD validation~~
 * [x] ~~`--crawl` mode to audit all pages from sitemap~~
-* [ ] i18n / `hreflang` validation
+* [x] ~~i18n / `hreflang` validation~~
 * [ ] Image SEO checks (missing `alt`, `next/image`, lazy loading)
 * [ ] Config file (`.seoauditrc.json`) for project-level defaults
 

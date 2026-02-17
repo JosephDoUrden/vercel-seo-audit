@@ -80,3 +80,21 @@ export function getFaviconLinks(html: string): FaviconLink[] {
 
   return links;
 }
+
+export interface HreflangLink {
+  hreflang: string;
+  href: string;
+}
+
+export function getHreflangLinks(html: string): HreflangLink[] {
+  const $ = cheerio.load(html);
+  const links: HreflangLink[] = [];
+  $('link[rel="alternate"][hreflang]').each((_, el) => {
+    const hreflang = $(el).attr('hreflang');
+    const href = $(el).attr('href');
+    if (hreflang && href) {
+      links.push({ hreflang: hreflang.trim().toLowerCase(), href: href.trim() });
+    }
+  });
+  return links;
+}
