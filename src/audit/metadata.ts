@@ -1,5 +1,5 @@
 import type { AuditContext, AuditFinding } from '../types.js';
-import { fetchPage } from '../utils/http.js';
+import { fetchPage, fetchHead } from '../utils/http.js';
 import {
   getCanonicalUrl,
   getNoindexDirective,
@@ -215,6 +215,115 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
       suggestion: 'Add <meta property="og:image"> with a representative image URL.',
       url: normalizedUrl,
     });
+  } else {
+    // 8a. Check if og:image uses a relative URL
+    if (!ogImage.startsWith('http://') && !ogImage.startsWith('https://')) {
+      findings.push({
+        code: 'OG_IMAGE_RELATIVE',
+        severity: 'warning',
+        category: 'metadata',
+        message: 'og:image uses a relative URL',
+        explanation:
+          'Many social media crawlers do not resolve relative URLs for og:image, which means your image may not appear in previews.',
+        suggestion: 'Use an absolute URL (starting with https://) for og:image.',
+        details: { ogImage },
+        url: normalizedUrl,
+      });
+    }
+
+    // 8b. Verify og:image URL returns 2xx
+    try {
+      const absoluteOgImage = ogImage.startsWith('http') ? ogImage : new URL(ogImage, finalUrl).href;
+      const { status } = await fetchHead(absoluteOgImage, fetchOptions);
+      if (status < 200 || status >= 300) {
+        findings.push({
+          code: 'OG_IMAGE_BROKEN',
+          severity: 'warning',
+          category: 'metadata',
+          message: `og:image URL returned HTTP ${status}`,
+          explanation:
+            'A broken og:image means social media platforms cannot display your preview image.',
+          suggestion: 'Ensure the og:image URL is accessible and returns a valid image.',
+          details: { ogImage: absoluteOgImage, status },
+          url: normalizedUrl,
+        });
+      }
+    } catch {
+      findings.push({
+        code: 'OG_IMAGE_BROKEN',
+        severity: 'warning',
+        category: 'metadata',
+        message: 'og:image URL could not be fetched',
+        explanation:
+          'A broken og:image means social media platforms cannot display your preview image.',
+        suggestion: 'Ensure the og:image URL is accessible and returns a valid image.',
+        details: { ogImage },
+        url: normalizedUrl,
+      });
+    }
+  }
+
+  // 9. Twitter Card tags
+  const twitterCard = getMetaTag(html, 'twitter:card');
+  const twitterImage = getMetaTag(html, 'twitter:image');
+
+  if (!twitterCard) {
+    findings.push({
+      code: 'TWITTER_CARD_MISSING',
+      severity: 'info',
+      category: 'metadata',
+      message: 'No twitter:card meta tag found',
+      explanation:
+        'Without a twitter:card tag, Twitter/X may not display rich previews when your page is shared.',
+      suggestion:
+        'Add <meta name="twitter:card" content="summary_large_image"> for rich previews.',
+      url: normalizedUrl,
+    });
+  }
+
+  if (!twitterImage) {
+    findings.push({
+      code: 'TWITTER_IMAGE_MISSING',
+      severity: 'info',
+      category: 'metadata',
+      message: 'No twitter:image meta tag found',
+      explanation:
+        'Without a twitter:image, Twitter/X falls back to og:image or shows no preview image.',
+      suggestion:
+        'Add <meta name="twitter:image"> with a URL to your preview image (recommended: 1200x628px).',
+      url: normalizedUrl,
+    });
+  } else {
+    // 9a. Verify twitter:image URL returns 2xx
+    try {
+      const absoluteTwitterImage = twitterImage.startsWith('http') ? twitterImage : new URL(twitterImage, finalUrl).href;
+      const { status } = await fetchHead(absoluteTwitterImage, fetchOptions);
+      if (status < 200 || status >= 300) {
+        findings.push({
+          code: 'TWITTER_IMAGE_BROKEN',
+          severity: 'warning',
+          category: 'metadata',
+          message: `twitter:image URL returned HTTP ${status}`,
+          explanation:
+            'A broken twitter:image means Twitter/X cannot display your preview image.',
+          suggestion: 'Ensure the twitter:image URL is accessible and returns a valid image.',
+          details: { twitterImage: absoluteTwitterImage, status },
+          url: normalizedUrl,
+        });
+      }
+    } catch {
+      findings.push({
+        code: 'TWITTER_IMAGE_BROKEN',
+        severity: 'warning',
+        category: 'metadata',
+        message: 'twitter:image URL could not be fetched',
+        explanation:
+          'A broken twitter:image means Twitter/X cannot display your preview image.',
+        suggestion: 'Ensure the twitter:image URL is accessible and returns a valid image.',
+        details: { twitterImage },
+        url: normalizedUrl,
+      });
+    }
   }
 
   return findings;
