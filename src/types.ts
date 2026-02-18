@@ -1,3 +1,13 @@
+export interface SeoAuditConfig {
+  url?: string;
+  strict?: boolean;
+  verbose?: boolean;
+  userAgent?: string;
+  pages?: string[];
+  report?: string;
+  timeout?: number;
+}
+
 export type IssueSeverity = 'error' | 'warning' | 'info' | 'pass';
 
 export type IssueCategory =
