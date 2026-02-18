@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.0.0...vercel-seo-audit-v2.1.0) (2026-02-18)
+
+
+### Features
+
+* add security headers audit module ([#51](https://github.com/JosephDoUrden/vercel-seo-audit/issues/51)) ([bd24694](https://github.com/JosephDoUrden/vercel-seo-audit/commit/bd24694136dfc88c6b0ca8d8a35e39a59cc7ee86))
+
 ## [2.0.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v1.0.0...vercel-seo-audit-v2.0.0) (2026-02-18)
 
 
