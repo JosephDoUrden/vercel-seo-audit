@@ -5,6 +5,7 @@ import { runAudit } from './runner.js';
 import { formatReport, formatJson, formatMarkdown, formatDiff, formatDiffJson } from './utils/output.js';
 import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
+import { loadConfig } from './utils/config.js';
 import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT } from './constants.js';
 import type { AuditFinding, AuditReport, DiffResult } from './types.js';
 
@@ -14,7 +15,7 @@ program
   .name('vercel-seo-audit')
   .description('Diagnose SEO and indexing issues for Next.js/Vercel websites')
   .version('0.5.0')
-  .argument('<url>', 'URL to audit (e.g. https://yusufhan.dev)')
+  .argument('[url]', 'URL to audit (e.g. https://yusufhan.dev)')
   .option('--json', 'Output results as JSON')
   .option('--verbose', 'Show detailed information for each finding')
   .option('-S, --strict', 'Fail on any SEO issues found, including warnings')
@@ -24,8 +25,31 @@ program
   .option('--report <format>', 'Write report to file: json or md')
   .option('--crawl [limit]', 'Crawl sitemap URLs and audit each page (default: 50)')
   .option('--diff <path>', 'Compare against a previous report.json')
-  .action(async (url: string, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string }) => {
-    const timeout = parseInt(options.timeout, 10);
+  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string }) => {
+    // Load config file
+    let config;
+    try {
+      config = loadConfig();
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(2);
+    }
+
+    // Resolve URL: CLI arg > config > error
+    const url = urlArg ?? config?.url;
+    if (!url) {
+      console.error('Error: URL is required. Provide it as an argument or set "url" in .seoauditrc.json');
+      process.exit(2);
+    }
+
+    // Merge options: CLI flags > config > defaults
+    const verbose = options.verbose ?? config?.verbose;
+    const strict = options.strict ?? config?.strict;
+
+    const timeoutSource = program.getOptionValueSource('timeout');
+    const timeout = timeoutSource === 'cli'
+      ? parseInt(options.timeout, 10)
+      : config?.timeout ?? parseInt(options.timeout, 10);
     if (isNaN(timeout) || timeout <= 0) {
       console.error('Error: --timeout must be a positive number');
       process.exit(2);
@@ -40,6 +64,7 @@ program
       process.exit(2);
     }
 
+    // Merge pages: CLI flag > config
     let pages: string[] | undefined;
     if (options.pages) {
       try {
@@ -48,15 +73,18 @@ program
         console.error(`Error: ${err instanceof Error ? err.message : err}`);
         process.exit(2);
       }
+    } else if (config?.pages) {
+      pages = config.pages;
     }
 
-    // Validate --report format
-    if (options.report && options.report !== 'json' && options.report !== 'md') {
+    // Merge report: CLI flag > config
+    const report = options.report ?? config?.report;
+    if (report && report !== 'json' && report !== 'md') {
       console.error('Error: --report must be "json" or "md"');
       process.exit(2);
     }
 
-    // Parse --crawl option
+    // Parse --crawl option (CLI-only)
     let crawl: number | undefined;
     if (options.crawl !== undefined) {
       crawl = options.crawl === true ? DEFAULT_CRAWL_LIMIT : parseInt(String(options.crawl), 10);
@@ -66,16 +94,17 @@ program
       }
     }
 
-    // Resolve user-agent preset or custom string
+    // Merge user-agent: CLI flag > config
+    const userAgentRaw = options.userAgent ?? config?.userAgent;
     let userAgent: string | undefined;
-    if (options.userAgent) {
-      const lower = options.userAgent.toLowerCase();
-      userAgent = USER_AGENT_PRESETS[lower] ?? options.userAgent;
+    if (userAgentRaw) {
+      const lower = userAgentRaw.toLowerCase();
+      userAgent = USER_AGENT_PRESETS[lower] ?? userAgentRaw;
     }
 
     try {
-      const report = await runAudit(url, {
-        verbose: options.verbose,
+      const auditReport = await runAudit(url, {
+        verbose,
         timeout,
         pages,
         userAgent,
@@ -83,21 +112,21 @@ program
       });
 
       if (options.json) {
-        console.log(formatJson(report));
+        console.log(formatJson(auditReport));
       } else {
-        console.log(formatReport(report, options.verbose ?? false));
+        console.log(formatReport(auditReport, verbose ?? false));
       }
 
       // Write report file if requested
-      if (options.report) {
-        const fileName = options.report === 'json' ? 'report.json' : 'report.md';
-        const content = options.report === 'json' ? formatJson(report) : formatMarkdown(report);
+      if (report) {
+        const fileName = report === 'json' ? 'report.json' : 'report.md';
+        const content = report === 'json' ? formatJson(auditReport) : formatMarkdown(auditReport);
         const filePath = resolve(process.cwd(), fileName);
         writeFileSync(filePath, content, 'utf-8');
         console.log(`\nReport written to ${fileName}`);
       }
 
-      // Diff against previous report
+      // Diff against previous report (CLI-only)
       if (options.diff) {
         let previousReport: AuditReport;
         try {
@@ -113,7 +142,7 @@ program
 
         const toKey = (f: AuditFinding) => `${f.code}::${f.url ?? ''}`;
 
-        const currentFindings = report.modules.flatMap((m) => m.findings);
+        const currentFindings = auditReport.modules.flatMap((m) => m.findings);
         const previousFindings = previousReport.modules.flatMap((m) => m.findings);
 
         const previousKeys = new Set(previousFindings.map(toKey));
@@ -133,8 +162,8 @@ program
       }
 
       // Exit code based on findings
-      const code = getExitCode(report.summary, options.strict ?? false);
-      if (code !== 0 && options.strict && report.summary.warnings > 0) {
+      const code = getExitCode(auditReport.summary, strict ?? false);
+      if (code !== 0 && strict && auditReport.summary.warnings > 0) {
         console.error('Warnings found in strict mode');
       }
       process.exit(code);
