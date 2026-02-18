@@ -14,7 +14,7 @@ const program = new Command();
 program
   .name('vercel-seo-audit')
   .description('Diagnose SEO and indexing issues for Next.js/Vercel websites')
-  .version('1.0.0')
+  .version('1.0.0') // x-release-please-version
   .argument('[url]', 'URL to audit (e.g. https://yusufhan.dev)')
   .option('--json', 'Output results as JSON')
   .option('--verbose', 'Show detailed information for each finding')
