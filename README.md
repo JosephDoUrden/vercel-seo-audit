@@ -337,17 +337,17 @@ npx vercel-seo-audit https://your-site.com --report md
 * [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
 * [x] ~~`--report` to write `report.json` / `report.md`~~
 * [x] ~~GitHub Action marketplace wrapper~~
-* [x] ~~`--diff` to compare audit runs and detect regressions~~
+* [x] ~~`--diff` to compare two audit runs and detect regressions~~
 * [x] ~~Structured data / JSON-LD validation~~
 * [x] ~~`--crawl` mode to audit all pages from sitemap~~
 * [x] ~~i18n / `hreflang` validation~~
 * [x] ~~Image SEO checks (missing `alt`, `next/image`, lazy loading)~~
 * [x] ~~Config file (`.seoauditrc.json`) for project-level defaults~~
+* [x] ~~Open Graph & Twitter Card image validation ([#36](https://github.com/JosephDoUrden/vercel-seo-audit/issues/36))~~
+* [x] ~~Security headers audit ([#37](https://github.com/JosephDoUrden/vercel-seo-audit/issues/37))~~
 
 ### Up next
 
-* [ ] Open Graph & Twitter Card image validation ([#36](https://github.com/JosephDoUrden/vercel-seo-audit/issues/36)) `good first issue`
-* [ ] Security headers audit ([#37](https://github.com/JosephDoUrden/vercel-seo-audit/issues/37)) `good first issue`
 * [ ] `--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41)) `good first issue`
 * [ ] GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44)) `good first issue`
 * [ ] Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))
