@@ -17,6 +17,7 @@ import {
   auditCrawl,
   auditI18n,
   auditImages,
+  auditSecurity,
 } from './audit/index.js';
 
 type AuditModule = {
@@ -37,6 +38,7 @@ const phase2Modules: AuditModule[] = [
   { name: 'structuredData', run: auditStructuredData },
   { name: 'i18n', run: auditI18n },
   { name: 'images', run: auditImages },
+  { name: 'security', run: auditSecurity },
 ];
 
 async function runModules(
