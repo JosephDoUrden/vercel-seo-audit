@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.3](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v0.5.2...vercel-seo-audit-v0.5.3) (2026-02-18)
+
+
+### Features
+
+* add Open Graph & Twitter Card image validation ([#36](https://github.com/JosephDoUrden/vercel-seo-audit/issues/36)) ([#48](https://github.com/JosephDoUrden/vercel-seo-audit/issues/48)) ([42d785e](https://github.com/JosephDoUrden/vercel-seo-audit/commit/42d785ecbc75245f9a34da9ffce61b9b2401da5c))
+
 ## [0.5.2](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v0.5.1...vercel-seo-audit-v0.5.2) (2026-02-18)
 
 
