@@ -120,6 +120,24 @@ vercel-seo-audit https://your-site.com --crawl
 vercel-seo-audit https://your-site.com --crawl 100
 ```
 
+### Config file
+
+Create a `.seoauditrc.json` in your project root to set defaults:
+
+```json
+{
+  "url": "https://your-site.com",
+  "strict": true,
+  "verbose": false,
+  "userAgent": "googlebot",
+  "pages": ["/docs", "/team", "/careers"],
+  "report": "json",
+  "timeout": 15000
+}
+```
+
+Then just run `vercel-seo-audit` with no arguments. CLI flags always override config values.
+
 ---
 
 ## What it checks
@@ -303,17 +321,37 @@ npx vercel-seo-audit https://your-site.com --report md
 
 ## Roadmap
 
+### Completed
+
 * [x] ~~`--strict` (warnings fail with exit code 1)~~
-* [x] ~~`--pages` to customise sampled paths (`/about,/pricing`)~~
+* [x] ~~`--pages` to customise sampled paths~~
 * [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
 * [x] ~~`--report` to write `report.json` / `report.md`~~
 * [x] ~~GitHub Action marketplace wrapper~~
-* [x] ~~`--diff` to compare two audit runs and detect regressions~~
+* [x] ~~`--diff` to compare audit runs and detect regressions~~
 * [x] ~~Structured data / JSON-LD validation~~
 * [x] ~~`--crawl` mode to audit all pages from sitemap~~
 * [x] ~~i18n / `hreflang` validation~~
 * [x] ~~Image SEO checks (missing `alt`, `next/image`, lazy loading)~~
-* [ ] Config file (`.seoauditrc.json`) for project-level defaults
+* [x] ~~Config file (`.seoauditrc.json`) for project-level defaults~~
+
+### Up next
+
+* [ ] Open Graph & Twitter Card image validation ([#36](https://github.com/JosephDoUrden/vercel-seo-audit/issues/36)) `good first issue`
+* [ ] Security headers audit ([#37](https://github.com/JosephDoUrden/vercel-seo-audit/issues/37)) `good first issue`
+* [ ] `--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41)) `good first issue`
+* [ ] GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44)) `good first issue`
+* [ ] Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))
+* [ ] HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))
+* [ ] `--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))
+* [ ] Internal broken link checker ([#42](https://github.com/JosephDoUrden/vercel-seo-audit/issues/42))
+
+### Future
+
+* [ ] Page speed score via PageSpeed Insights API ([#43](https://github.com/JosephDoUrden/vercel-seo-audit/issues/43))
+* [ ] Accessibility basics audit ([#45](https://github.com/JosephDoUrden/vercel-seo-audit/issues/45))
+* [ ] Multi-URL batch auditing ([#46](https://github.com/JosephDoUrden/vercel-seo-audit/issues/46))
+* [ ] Plugin system for custom audit checks ([#47](https://github.com/JosephDoUrden/vercel-seo-audit/issues/47))
 
 ---
 
