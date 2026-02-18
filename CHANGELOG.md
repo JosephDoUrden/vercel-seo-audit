@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.2](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v0.5.1...vercel-seo-audit-v0.5.2) (2026-02-18)
+
+
+### Features
+
+* add .seoauditrc.json config file support ([#30](https://github.com/JosephDoUrden/vercel-seo-audit/issues/30)) ([5c145ed](https://github.com/JosephDoUrden/vercel-seo-audit/commit/5c145ed3f0ebefeac69f24a971aadb922ed13145))
+
 ## [0.5.1](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v0.5.0...vercel-seo-audit-v0.5.1) (2026-02-17)
 
 
