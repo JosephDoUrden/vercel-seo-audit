@@ -171,6 +171,8 @@ Then just run `vercel-seo-audit` with no arguments. CLI flags always override co
 * `noindex` via meta tags **and** `X-Robots-Tag` header
 * Missing `title`, `description`, `charset`, `viewport`
 * Open Graph basics: `og:title`, `og:description`, `og:image`
+* Broken or relative `og:image` URL validation
+* Twitter Card: `twitter:card`, `twitter:image` presence and validation
 
 ### Favicon
 
@@ -215,6 +217,13 @@ Progress is printed to stderr as each page is crawled.
 * Missing `x-default` fallback
 * Duplicate hreflang values
 * Missing reciprocal links (page A→B but B doesn't→A)
+
+### Security Headers
+
+* Missing `Strict-Transport-Security` (HSTS)
+* Missing `X-Content-Type-Options: nosniff`
+* Missing frame protection (`X-Frame-Options` or CSP `frame-ancestors`)
+* Missing `Referrer-Policy`
 
 ### Next.js / Vercel
 
