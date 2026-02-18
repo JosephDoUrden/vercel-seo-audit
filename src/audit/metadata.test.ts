@@ -4,11 +4,13 @@ import { auditMetadata } from './metadata.js';
 
 vi.mock('../utils/http.js', () => ({
   fetchPage: vi.fn(),
+  fetchHead: vi.fn(),
 }));
 
-import { fetchPage } from '../utils/http.js';
+import { fetchPage, fetchHead } from '../utils/http.js';
 
 const mockFetchPage = vi.mocked(fetchPage);
+const mockFetchHead = vi.mocked(fetchHead);
 
 function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
   return {
@@ -39,11 +41,14 @@ const FULL_HTML = `<html><head>
   <meta property="og:title" content="Example">
   <meta property="og:description" content="A description">
   <meta property="og:image" content="https://example.com/image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://example.com/twitter.png">
 </head><body></body></html>`;
 
 beforeEach(() => {
   vi.resetAllMocks();
   mockFetchPage.mockResolvedValue(makePage(FULL_HTML));
+  mockFetchHead.mockResolvedValue({ status: 200, headers: new Headers() });
 });
 
 describe('auditMetadata', () => {
@@ -177,6 +182,90 @@ describe('auditMetadata', () => {
     );
     const findings = await auditMetadata(makeCtx());
     expect(findings.find((f) => f.code === 'OG_IMAGE_MISSING')).toBeDefined();
+  });
+
+  it('detects OG_IMAGE_RELATIVE', async () => {
+    mockFetchPage.mockResolvedValue(
+      makePage(
+        FULL_HTML.replace(
+          '<meta property="og:image" content="https://example.com/image.png">',
+          '<meta property="og:image" content="/image.png">',
+        ),
+      ),
+    );
+    const findings = await auditMetadata(makeCtx());
+    const relative = findings.find((f) => f.code === 'OG_IMAGE_RELATIVE');
+    expect(relative).toBeDefined();
+    expect(relative!.severity).toBe('warning');
+  });
+
+  it('detects OG_IMAGE_BROKEN when HEAD returns non-2xx', async () => {
+    mockFetchHead.mockResolvedValue({ status: 404, headers: new Headers() });
+    const findings = await auditMetadata(makeCtx());
+    const broken = findings.find((f) => f.code === 'OG_IMAGE_BROKEN');
+    expect(broken).toBeDefined();
+    expect(broken!.severity).toBe('warning');
+    expect(broken!.message).toContain('404');
+  });
+
+  it('detects OG_IMAGE_BROKEN when HEAD request fails', async () => {
+    mockFetchHead.mockRejectedValue(new Error('timeout'));
+    const findings = await auditMetadata(makeCtx());
+    const broken = findings.find((f) => f.code === 'OG_IMAGE_BROKEN');
+    expect(broken).toBeDefined();
+    expect(broken!.message).toContain('could not be fetched');
+  });
+
+  it('does not report OG_IMAGE_BROKEN when image returns 200', async () => {
+    const findings = await auditMetadata(makeCtx());
+    expect(findings.find((f) => f.code === 'OG_IMAGE_BROKEN')).toBeUndefined();
+  });
+
+  it('detects TWITTER_CARD_MISSING', async () => {
+    mockFetchPage.mockResolvedValue(
+      makePage(
+        FULL_HTML.replace('<meta name="twitter:card" content="summary_large_image">', ''),
+      ),
+    );
+    const findings = await auditMetadata(makeCtx());
+    const missing = findings.find((f) => f.code === 'TWITTER_CARD_MISSING');
+    expect(missing).toBeDefined();
+    expect(missing!.severity).toBe('info');
+  });
+
+  it('detects TWITTER_IMAGE_MISSING', async () => {
+    mockFetchPage.mockResolvedValue(
+      makePage(
+        FULL_HTML.replace('<meta name="twitter:image" content="https://example.com/twitter.png">', ''),
+      ),
+    );
+    const findings = await auditMetadata(makeCtx());
+    const missing = findings.find((f) => f.code === 'TWITTER_IMAGE_MISSING');
+    expect(missing).toBeDefined();
+    expect(missing!.severity).toBe('info');
+  });
+
+  it('detects TWITTER_IMAGE_BROKEN when HEAD returns non-2xx', async () => {
+    mockFetchHead.mockImplementation(async (url: string) => {
+      if (url.includes('twitter')) return { status: 403, headers: new Headers() };
+      return { status: 200, headers: new Headers() };
+    });
+    const findings = await auditMetadata(makeCtx());
+    const broken = findings.find((f) => f.code === 'TWITTER_IMAGE_BROKEN');
+    expect(broken).toBeDefined();
+    expect(broken!.severity).toBe('warning');
+    expect(broken!.message).toContain('403');
+  });
+
+  it('detects TWITTER_IMAGE_BROKEN when HEAD request fails', async () => {
+    mockFetchHead.mockImplementation(async (url: string) => {
+      if (url.includes('twitter')) throw new Error('timeout');
+      return { status: 200, headers: new Headers() };
+    });
+    const findings = await auditMetadata(makeCtx());
+    const broken = findings.find((f) => f.code === 'TWITTER_IMAGE_BROKEN');
+    expect(broken).toBeDefined();
+    expect(broken!.message).toContain('could not be fetched');
   });
 
   it('stores html and headers on ctx', async () => {
