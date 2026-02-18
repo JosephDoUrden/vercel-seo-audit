@@ -1,11 +1,20 @@
 import type { AuditContext, AuditFinding } from '../types.js';
+import { fetchHead } from '../utils/http.js';
 
 export async function auditSecurity(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
-  const { normalizedUrl, headers } = ctx;
+  const { normalizedUrl, fetchOptions } = ctx;
 
-  if (!headers) {
-    return findings;
+  let headers: Record<string, string>;
+  if (ctx.headers) {
+    headers = ctx.headers;
+  } else {
+    try {
+      const res = await fetchHead(normalizedUrl, fetchOptions);
+      headers = Object.fromEntries(res.headers.entries());
+    } catch {
+      return findings;
+    }
   }
 
   // 1. Strict-Transport-Security

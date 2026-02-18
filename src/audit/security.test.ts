@@ -1,6 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuditContext } from '../types.js';
 import { auditSecurity } from './security.js';
+
+vi.mock('../utils/http.js', () => ({
+  fetchHead: vi.fn(),
+}));
+
+import { fetchHead } from '../utils/http.js';
+const mockFetchHead = vi.mocked(fetchHead);
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
 
 function makeCtx(headers?: Record<string, string>): AuditContext {
   return {
@@ -25,7 +36,18 @@ describe('auditSecurity', () => {
     expect(findings).toHaveLength(0);
   });
 
-  it('returns empty findings when headers not available', async () => {
+  it('falls back to fetchHead when ctx.headers is undefined', async () => {
+    mockFetchHead.mockResolvedValue({
+      status: 200,
+      headers: new Headers(ALL_HEADERS),
+    });
+    const findings = await auditSecurity(makeCtx(undefined));
+    expect(mockFetchHead).toHaveBeenCalledTimes(1);
+    expect(findings).toHaveLength(0);
+  });
+
+  it('returns empty findings when fetchHead fails', async () => {
+    mockFetchHead.mockRejectedValue(new Error('timeout'));
     const findings = await auditSecurity(makeCtx(undefined));
     expect(findings).toHaveLength(0);
   });
