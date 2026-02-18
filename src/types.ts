@@ -21,7 +21,8 @@ export type IssueCategory =
   | 'structured-data'
   | 'crawl'
   | 'i18n'
-  | 'images';
+  | 'images'
+  | 'security';
 
 export type IssueCode =
   // Redirect issues
@@ -99,7 +100,12 @@ export type IssueCode =
   | 'IMG_NO_NEXT_IMAGE'
   | 'IMG_NO_LAZY_LOADING'
   | 'IMG_LARGE_FILE'
-  | 'IMG_MISSING_DIMENSIONS';
+  | 'IMG_MISSING_DIMENSIONS'
+  // Security header issues
+  | 'HSTS_MISSING'
+  | 'CONTENT_TYPE_OPTIONS_MISSING'
+  | 'FRAME_PROTECTION_MISSING'
+  | 'REFERRER_POLICY_MISSING';
 
 export interface AuditFinding {
   code: IssueCode;
