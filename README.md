@@ -225,6 +225,13 @@ Progress is printed to stderr as each page is crawled.
 * Missing frame protection (`X-Frame-Options` or CSP `frame-ancestors`)
 * Missing `Referrer-Policy`
 
+### Performance Hints
+
+* HTML document size (warning > 1 MB, info > 500 KB)
+* Render-blocking `<script>` tags in `<head>` without `async`/`defer`
+* Large inline `<style>` blocks (> 50 KB)
+* Missing `<link rel="preconnect">` for third-party origins
+
 ### Next.js / Vercel
 
 * Detect Vercel deployment
@@ -345,12 +352,12 @@ npx vercel-seo-audit https://your-site.com --report md
 * [x] ~~Config file (`.seoauditrc.json`) for project-level defaults~~
 * [x] ~~Open Graph & Twitter Card image validation ([#36](https://github.com/JosephDoUrden/vercel-seo-audit/issues/36))~~
 * [x] ~~Security headers audit ([#37](https://github.com/JosephDoUrden/vercel-seo-audit/issues/37))~~
+* [x] ~~Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))~~
 
 ### Up next
 
 * [ ] `--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41)) `good first issue`
 * [ ] GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44)) `good first issue`
-* [ ] Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))
 * [ ] HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))
 * [ ] `--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))
 * [ ] Internal broken link checker ([#42](https://github.com/JosephDoUrden/vercel-seo-audit/issues/42))
