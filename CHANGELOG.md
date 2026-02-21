@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.2.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.1.0...vercel-seo-audit-v2.2.0) (2026-02-21)
+
+
+### Features
+
+* add performance hints audit module ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38)) ([#53](https://github.com/JosephDoUrden/vercel-seo-audit/issues/53)) ([2339c03](https://github.com/JosephDoUrden/vercel-seo-audit/commit/2339c030b5ab652b3e7a6254b9a87e8ba753e632))
+
+
+### Bug Fixes
+
+* **ci:** add workflow_run fallback trigger for release-please ([6988f80](https://github.com/JosephDoUrden/vercel-seo-audit/commit/6988f806ef28fe4ffb1201e4782f4ace79b331c0))
+
 ## [2.1.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.0.0...vercel-seo-audit-v2.1.0) (2026-02-18)
 
 
