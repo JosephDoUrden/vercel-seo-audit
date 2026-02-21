@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.3.1...vercel-seo-audit-v2.4.0) (2026-02-21)
+
+
+### Features
+
+* add landing page for GitHub Pages ([#62](https://github.com/JosephDoUrden/vercel-seo-audit/issues/62)) ([526f77c](https://github.com/JosephDoUrden/vercel-seo-audit/commit/526f77c8c4f54282a7d5615cb390fcf0172a8279))
+
 ## [2.3.1](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.3.0...vercel-seo-audit-v2.3.1) (2026-02-21)
 
 
