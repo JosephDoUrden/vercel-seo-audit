@@ -13,6 +13,7 @@ vi.mock('./audit/index.js', () => ({
   auditI18n: vi.fn(),
   auditImages: vi.fn(),
   auditSecurity: vi.fn(),
+  auditPerformance: vi.fn(),
 }));
 
 import {
@@ -27,6 +28,7 @@ import {
   auditI18n,
   auditImages,
   auditSecurity,
+  auditPerformance,
 } from './audit/index.js';
 
 const mockRedirects = vi.mocked(auditRedirects);
@@ -40,6 +42,7 @@ const mockCrawl = vi.mocked(auditCrawl);
 const mockI18n = vi.mocked(auditI18n);
 const mockImages = vi.mocked(auditImages);
 const mockSecurity = vi.mocked(auditSecurity);
+const mockPerformance = vi.mocked(auditPerformance);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -56,6 +59,7 @@ beforeEach(() => {
   mockI18n.mockResolvedValue([]);
   mockImages.mockResolvedValue([]);
   mockSecurity.mockResolvedValue([]);
+  mockPerformance.mockResolvedValue([]);
 });
 
 describe('runAudit', () => {
@@ -76,7 +80,7 @@ describe('runAudit', () => {
     expect(mockRedirects).toHaveBeenCalledTimes(1);
   });
 
-  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security)', async () => {
+  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security, performance)', async () => {
     await runAudit('https://example.com');
 
     expect(mockSitemap).toHaveBeenCalledTimes(1);
@@ -87,6 +91,7 @@ describe('runAudit', () => {
     expect(mockI18n).toHaveBeenCalledTimes(1);
     expect(mockImages).toHaveBeenCalledTimes(1);
     expect(mockSecurity).toHaveBeenCalledTimes(1);
+    expect(mockPerformance).toHaveBeenCalledTimes(1);
   });
 
   it('does not run crawl module when crawl option is not set', async () => {
@@ -203,5 +208,6 @@ describe('runAudit', () => {
     expect(names).toContain('i18n');
     expect(names).toContain('images');
     expect(names).toContain('security');
+    expect(names).toContain('performance');
   });
 });

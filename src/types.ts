@@ -22,7 +22,8 @@ export type IssueCategory =
   | 'crawl'
   | 'i18n'
   | 'images'
-  | 'security';
+  | 'security'
+  | 'performance';
 
 export type IssueCode =
   // Redirect issues
@@ -105,7 +106,12 @@ export type IssueCode =
   | 'HSTS_MISSING'
   | 'CONTENT_TYPE_OPTIONS_MISSING'
   | 'FRAME_PROTECTION_MISSING'
-  | 'REFERRER_POLICY_MISSING';
+  | 'REFERRER_POLICY_MISSING'
+  // Performance issues
+  | 'HTML_SIZE_WARNING'
+  | 'RENDER_BLOCKING_SCRIPT'
+  | 'LARGE_INLINE_STYLE'
+  | 'MISSING_PRECONNECT';
 
 export interface AuditFinding {
   code: IssueCode;
