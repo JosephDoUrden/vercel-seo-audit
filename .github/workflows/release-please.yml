@@ -3,6 +3,7 @@ name: Release Please
 on:
   push:
     branches: [main]
+    paths-ignore: ['site/**']
   workflow_run:
     workflows: ["CI"]
     types: [completed]
