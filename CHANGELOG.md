@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.3.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.2.2...vercel-seo-audit-v2.3.0) (2026-02-21)
+
+
+### Features
+
+* add HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39)) ([#57](https://github.com/JosephDoUrden/vercel-seo-audit/issues/57)) ([a71b722](https://github.com/JosephDoUrden/vercel-seo-audit/commit/a71b72237854579b24196723531e4f1a5a5d3268))
+
 ## [2.2.2](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.2.1...vercel-seo-audit-v2.2.2) (2026-02-21)
 
 
