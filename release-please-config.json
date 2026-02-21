@@ -10,6 +10,9 @@
       "extra-files": [
         "src/cli.ts",
         "src/constants.ts"
+      ],
+      "exclude-paths": [
+        "site"
       ]
     }
   }
