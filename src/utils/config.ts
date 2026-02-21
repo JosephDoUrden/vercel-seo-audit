@@ -81,8 +81,8 @@ export function validateConfig(raw: unknown): SeoAuditConfig {
   }
 
   if ('report' in obj) {
-    if (obj.report !== 'json' && obj.report !== 'md') {
-      throw new Error(`Error in ${CONFIG_FILE}: "report" must be "json" or "md"`);
+    if (obj.report !== 'json' && obj.report !== 'md' && obj.report !== 'html') {
+      throw new Error(`Error in ${CONFIG_FILE}: "report" must be "json", "md", or "html"`);
     }
     config.report = obj.report;
   }

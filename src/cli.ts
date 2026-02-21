@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Command } from 'commander';
 import { runAudit } from './runner.js';
-import { formatReport, formatJson, formatMarkdown, formatDiff, formatDiffJson } from './utils/output.js';
+import { formatReport, formatJson, formatMarkdown, formatHtml, formatDiff, formatDiffJson } from './utils/output.js';
 import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { loadConfig } from './utils/config.js';
@@ -22,7 +22,7 @@ program
   .option('--timeout <ms>', 'Request timeout in milliseconds', '10000')
   .option('--pages <paths>', 'Comma-separated page paths to check for redirects (e.g. /about,/pricing)')
   .option('--user-agent <preset|string>', 'User-Agent for requests: googlebot, bingbot, or a custom string')
-  .option('--report <format>', 'Write report to file: json or md')
+  .option('--report <format>', 'Write report to file: json, md, or html')
   .option('--crawl [limit]', 'Crawl sitemap URLs and audit each page (default: 50)')
   .option('--diff <path>', 'Compare against a previous report.json')
   .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string }) => {
@@ -79,8 +79,8 @@ program
 
     // Merge report: CLI flag > config
     const report = options.report ?? config?.report;
-    if (report && report !== 'json' && report !== 'md') {
-      console.error('Error: --report must be "json" or "md"');
+    if (report && report !== 'json' && report !== 'md' && report !== 'html') {
+      console.error('Error: --report must be "json", "md", or "html"');
       process.exit(2);
     }
 
@@ -119,8 +119,14 @@ program
 
       // Write report file if requested
       if (report) {
-        const fileName = report === 'json' ? 'report.json' : 'report.md';
-        const content = report === 'json' ? formatJson(auditReport) : formatMarkdown(auditReport);
+        const fileNames: Record<string, string> = { json: 'report.json', md: 'report.md', html: 'report.html' };
+        const formatters: Record<string, () => string> = {
+          json: () => formatJson(auditReport),
+          md: () => formatMarkdown(auditReport),
+          html: () => formatHtml(auditReport),
+        };
+        const fileName = fileNames[report];
+        const content = formatters[report]();
         const filePath = resolve(process.cwd(), fileName);
         writeFileSync(filePath, content, 'utf-8');
         console.log(`\nReport written to ${fileName}`);
