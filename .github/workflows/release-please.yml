@@ -49,7 +49,13 @@ jobs:
       - run: npm test
       - name: Publish to npm
         if: env.NODE_AUTH_TOKEN != ''
-        run: npm publish --provenance --access public
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "vercel-seo-audit@${VERSION}" version >/dev/null 2>&1; then
+            echo "::warning::v${VERSION} already published — skipping."
+          else
+            npm publish --provenance --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Skip publish (no token)
