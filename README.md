@@ -103,9 +103,10 @@ vercel-seo-audit https://your-site.com --user-agent bingbot
 # Custom crawler user-agent
 vercel-seo-audit https://your-site.com --user-agent "Googlebot-Image/1.0"
 
-# Write report to file (json or md)
+# Write report to file (json, md, or html)
 vercel-seo-audit https://your-site.com --report json
 vercel-seo-audit https://your-site.com --report md
+vercel-seo-audit https://your-site.com --report html
 
 # Compare against a previous report to detect regressions
 vercel-seo-audit https://your-site.com --diff previous-report.json
@@ -290,7 +291,7 @@ All inputs:
 | `strict` | no | `false` | Fail on warnings too |
 | `user-agent` | no | — | `googlebot`, `bingbot`, or custom string |
 | `pages` | no | — | Comma-separated page paths |
-| `report` | no | — | Write report file: `json` or `md` |
+| `report` | no | — | Write report file: `json`, `md`, or `html` |
 | `crawl` | no | — | Crawl sitemap URLs (number = page limit, default 50) |
 | `timeout` | no | `10000` | Request timeout in ms |
 | `verbose` | no | `false` | Show detailed output |
@@ -353,12 +354,12 @@ npx vercel-seo-audit https://your-site.com --report md
 * [x] ~~Open Graph & Twitter Card image validation ([#36](https://github.com/JosephDoUrden/vercel-seo-audit/issues/36))~~
 * [x] ~~Security headers audit ([#37](https://github.com/JosephDoUrden/vercel-seo-audit/issues/37))~~
 * [x] ~~Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))~~
+* [x] ~~HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))~~
 
 ### Up next
 
 * [ ] `--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41)) `good first issue`
 * [ ] GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44)) `good first issue`
-* [ ] HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))
 * [ ] `--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))
 * [ ] Internal broken link checker ([#42](https://github.com/JosephDoUrden/vercel-seo-audit/issues/42))
 

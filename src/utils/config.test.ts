@@ -106,7 +106,7 @@ describe('validateConfig', () => {
   });
 
   it('throws when report is invalid', () => {
-    expect(() => validateConfig({ report: 'html' })).toThrow('"report" must be "json" or "md"');
+    expect(() => validateConfig({ report: 'pdf' })).toThrow('"report" must be "json", "md", or "html"');
   });
 
   it('throws when url is not a string', () => {

@@ -4,7 +4,7 @@ export interface SeoAuditConfig {
   verbose?: boolean;
   userAgent?: string;
   pages?: string[];
-  report?: string;
+  report?: 'json' | 'md' | 'html';
   timeout?: number;
 }
 
