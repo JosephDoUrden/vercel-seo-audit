@@ -124,6 +124,13 @@ export interface AuditFinding {
   url?: string;
 }
 
+export interface FixSuggestion {
+  code: IssueCode;
+  filePath: string;
+  description: string;
+  content: string;
+}
+
 export interface AuditModuleResult {
   module: string;
   findings: AuditFinding[];

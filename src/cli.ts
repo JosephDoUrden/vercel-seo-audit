@@ -1,11 +1,13 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+import { dirname, resolve } from 'node:path';
 import { Command } from 'commander';
 import { runAudit } from './runner.js';
-import { formatReport, formatJson, formatMarkdown, formatHtml, formatDiff, formatDiffJson } from './utils/output.js';
+import { formatReport, formatJson, formatMarkdown, formatHtml, formatDiff, formatDiffJson, formatFixes } from './utils/output.js';
 import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { loadConfig } from './utils/config.js';
+import { generateFixes } from './fixes/index.js';
 import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT } from './constants.js';
 import type { AuditFinding, AuditReport, DiffResult } from './types.js';
 
@@ -25,7 +27,9 @@ program
   .option('--report <format>', 'Write report to file: json, md, or html')
   .option('--crawl [limit]', 'Crawl sitemap URLs and audit each page (default: 50)')
   .option('--diff <path>', 'Compare against a previous report.json')
-  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string }) => {
+  .option('--fix', 'Show auto-fix suggestions for supported findings')
+  .option('--apply', 'Write suggested fixes to disk (requires --fix)')
+  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean }) => {
     // Load config file
     let config;
     try {
@@ -75,6 +79,12 @@ program
       }
     } else if (config?.pages) {
       pages = config.pages;
+    }
+
+    // Validate --apply requires --fix
+    if (options.apply && !options.fix) {
+      console.error('Error: --apply requires --fix');
+      process.exit(2);
     }
 
     // Merge report: CLI flag > config
@@ -164,6 +174,38 @@ program
           console.log(formatDiffJson(diff));
         } else {
           console.log(formatDiff(diff));
+        }
+      }
+
+      // Show fix suggestions if --fix
+      if (options.fix) {
+        const allFindings = auditReport.modules.flatMap((m) => m.findings);
+        const fixes = generateFixes(allFindings, auditReport.url);
+
+        console.log(formatFixes(fixes));
+
+        if (options.apply && fixes.length > 0) {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          const answer = await new Promise<string>((res) => {
+            rl.question(`Write ${fixes.length} file(s) to disk? [y/N] `, res);
+          });
+          rl.close();
+
+          if (answer.toLowerCase() === 'y') {
+            for (const fix of fixes) {
+              const filePath = resolve(process.cwd(), fix.filePath);
+              if (existsSync(filePath)) {
+                console.log(`  Skipped ${fix.filePath} (already exists)`);
+                continue;
+              }
+              const dir = dirname(filePath);
+              mkdirSync(dir, { recursive: true });
+              writeFileSync(filePath, fix.content, 'utf-8');
+              console.log(`  Created ${fix.filePath}`);
+            }
+          } else {
+            console.log('  No files written.');
+          }
         }
       }
 
