@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { AuditFinding, AuditReport, DiffResult, IssueSeverity } from '../types.js';
+import type { AuditFinding, AuditReport, DiffResult, FixSuggestion, IssueSeverity } from '../types.js';
 
 const severityColors: Record<IssueSeverity, (text: string) => string> = {
   error: chalk.red,
@@ -324,4 +324,28 @@ export function formatDiff(diff: DiffResult): string {
 
 export function formatDiffJson(diff: DiffResult): string {
   return JSON.stringify(diff, null, 2);
+}
+
+export function formatFixes(fixes: FixSuggestion[]): string {
+  if (fixes.length === 0) {
+    return chalk.dim('\n  No auto-fixable issues found.\n');
+  }
+
+  const lines: string[] = [];
+
+  lines.push('');
+  lines.push(chalk.bold.underline('Auto-fix suggestions'));
+  lines.push('');
+
+  for (const fix of fixes) {
+    lines.push(chalk.bold.cyan(`  File: ${fix.filePath}`));
+    lines.push(chalk.dim(`  ${fix.description}`));
+    lines.push('');
+    for (const line of fix.content.split('\n')) {
+      lines.push(chalk.green(`    ${line}`));
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }
