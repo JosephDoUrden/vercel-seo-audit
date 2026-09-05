@@ -27,3 +27,6 @@ npm-debug.log*
 # Coverage / test artifacts
 coverage/
 .nyc_output/
+
+# Local editor config
+CLAUDE.md
