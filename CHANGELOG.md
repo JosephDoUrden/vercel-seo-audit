@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.1](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.5.0...vercel-seo-audit-v2.5.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **action:** pass inputs through env, pin versions ([#117](https://github.com/JosephDoUrden/vercel-seo-audit/issues/117)) ([29e8115](https://github.com/JosephDoUrden/vercel-seo-audit/commit/29e81159cc94f22f97bbef45cbb1c3f2d54bb3f1))
+
 ## [2.5.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.4.1...vercel-seo-audit-v2.5.0) (2026-03-07)
 
 
