@@ -276,12 +276,14 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: JosephDoUrden/vercel-seo-audit@v1
+      - uses: JosephDoUrden/vercel-seo-audit@vercel-seo-audit-v2.5.0 # x-release-please-version
         with:
           url: https://your-site.com
           strict: true
           report: json
 ```
+
+The pinned tag is updated on each release.
 
 All inputs:
 
@@ -291,8 +293,7 @@ All inputs:
 | `strict` | no | `false` | Fail on warnings too |
 | `user-agent` | no | — | `googlebot`, `bingbot`, or custom string |
 | `pages` | no | — | Comma-separated page paths |
-| `report` | no | — | Write report file: `json`, `md`, or `html` |
-| `crawl` | no | — | Crawl sitemap URLs (number = page limit, default 50) |
+| `report` | no | — | Write report file: `json` or `md` |
 | `timeout` | no | `10000` | Request timeout in ms |
 | `verbose` | no | `false` | Show detailed output |
 

@@ -13,7 +13,14 @@ to automate versioning, changelog generation, and GitHub releases.
    manifest. It stays open and accumulates changes until you're ready.
 
 3. **Merge the release PR.**
-   This creates a GitHub Release with a git tag (`v0.6.0`, etc.).
+   This creates a GitHub Release with a git tag (`vercel-seo-audit-v2.5.0`, etc.).
+   Release-please bumps the `npx vercel-seo-audit@x.y.z` pin in `action.yml`
+   and the `uses: JosephDoUrden/vercel-seo-audit@vercel-seo-audit-vx.y.z` line
+   in `README.md` (both carry an `x-release-please-version` marker). `site/` is
+   excluded from release-please, so the same `uses:` line inside the
+   "GitHub Action" quick-start `<code>` block in `site/index.html` (find it with
+   `grep -n 'uses: JosephDoUrden/vercel-seo-audit@' site/index.html`) is bumped
+   by hand to the new tag.
 
 4. **npm publish runs automatically.**
    The `publish.yml` workflow triggers on the GitHub Release and publishes to
