@@ -23,8 +23,12 @@ to automate versioning, changelog generation, and GitHub releases.
    by hand to the new tag.
 
 4. **npm publish runs automatically.**
-   The `publish.yml` workflow triggers on the GitHub Release and publishes to
-   npm using the `NPM_TOKEN` secret.
+   The `publish` job in `release-please.yml` runs once the release exists and
+   publishes with npm trusted publishing: the job authenticates through GitHub's
+   OIDC token, no npm token is stored anywhere, and provenance is attached. If the
+   release was created but the publish failed, run the workflow by hand
+   (Actions → Release Please → Run workflow); the job skips versions that are
+   already on npm.
 
 ## Commit message format
 
@@ -45,12 +49,13 @@ commit type determines how the version is bumped:
 
 ## Required secrets
 
-| Secret | Where | Purpose |
-| ------ | ----- | ------- |
-| `NPM_TOKEN` | Repository → Settings → Secrets → Actions | npm publish authentication |
+None for npm. Publishing uses a trusted publisher configured once on npmjs.com
+(package → Settings → Trusted publisher → GitHub Actions, owner `JosephDoUrden`,
+repository `vercel-seo-audit`, workflow `release-please.yml`, no environment).
+Requires npm 11.5.1 or newer on the runner, which the job installs.
 
-The publish workflow is fork-safe — if `NPM_TOKEN` is not set, it prints a
-warning and skips the publish step.
+`RELEASE_PLEASE_TOKEN` (a fine-grained GitHub token) is still needed so the
+release PR can trigger CI.
 
 ## Required repository permissions
 
@@ -71,5 +76,5 @@ npm version patch  # or minor / major
 git push origin main --tags
 
 # 3. Create a GitHub Release from the tag
-#    → this triggers npm publish via publish.yml
+#    → then run the Release Please workflow by hand to publish
 ```
