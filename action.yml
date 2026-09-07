@@ -61,11 +61,6 @@ runs:
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
       run: |
-        if [ -z "$INPUT_URL" ]; then
-          echo "::error::url input is required"
-          exit 2
-        fi
-
         args=()
 
         if [ "$INPUT_STRICT" = "true" ]; then
@@ -93,8 +88,13 @@ runs:
         fi
 
         # "--" ends option parsing, so a url starting with "-" is a url, not a flag.
+        # An empty url sends nothing, the CLI then reads it from .seoauditrc.json or errors.
+        target=()
+        if [ -n "$INPUT_URL" ]; then
+          target=(-- "$INPUT_URL")
+        fi
         set +e
-        npx vercel-seo-audit@2.5.0 "${args[@]}" -- "$INPUT_URL" # x-release-please-version
+        npx vercel-seo-audit@2.5.0 "${args[@]}" "${target[@]}" # x-release-please-version
         EXIT_CODE=$?
         set -e
 

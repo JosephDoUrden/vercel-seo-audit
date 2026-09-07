@@ -215,12 +215,10 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
     expect(r.argv!.slice(1, sep)).toEqual(['--strict', '--report', 'md']);
   });
 
-  it('refuses an empty url instead of passing an empty argument', () => {
+  it('sends no url argument at all when the url input is empty', () => {
     const r = run({ INPUT_URL: '' });
-    expect(r.status).toBe(2);
-    expect(r.argv).toBeNull();
-    expect(r.stderr + r.stdout).toContain('::error::');
-    expect(r.output).toBe('');
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.argv).toEqual([expect.stringMatching(/^vercel-seo-audit@\d+\.\d+\.\d+$/)]);
   });
 
   it('omits --timeout when the timeout input is empty', () => {
