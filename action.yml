@@ -43,51 +43,61 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
       with:
         node-version: 20
 
     - name: Run SEO Audit
       id: audit
       shell: bash
+      # Inputs go through env, not ${{ }} inside run, so a hostile value
+      # (PR title, branch name, dispatch input) cannot break out of the script.
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_STRICT: ${{ inputs.strict }}
+        INPUT_USER_AGENT: ${{ inputs.user-agent }}
+        INPUT_PAGES: ${{ inputs.pages }}
+        INPUT_REPORT: ${{ inputs.report }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
       run: |
-        args="${{ inputs.url }}"
+        args=("$INPUT_URL")
 
-        if [ "${{ inputs.strict }}" = "true" ]; then
-          args="$args --strict"
+        if [ "$INPUT_STRICT" = "true" ]; then
+          args+=(--strict)
         fi
 
-        if [ -n "${{ inputs.user-agent }}" ]; then
-          args="$args --user-agent \"${{ inputs.user-agent }}\""
+        if [ -n "$INPUT_USER_AGENT" ]; then
+          args+=(--user-agent "$INPUT_USER_AGENT")
         fi
 
-        if [ -n "${{ inputs.pages }}" ]; then
-          args="$args --pages ${{ inputs.pages }}"
+        if [ -n "$INPUT_PAGES" ]; then
+          args+=(--pages "$INPUT_PAGES")
         fi
 
-        if [ -n "${{ inputs.report }}" ]; then
-          args="$args --report ${{ inputs.report }}"
+        if [ -n "$INPUT_REPORT" ]; then
+          args+=(--report "$INPUT_REPORT")
         fi
 
-        if [ "${{ inputs.timeout }}" != "10000" ]; then
-          args="$args --timeout ${{ inputs.timeout }}"
+        if [ "$INPUT_TIMEOUT" != "10000" ]; then
+          args+=(--timeout "$INPUT_TIMEOUT")
         fi
 
-        if [ "${{ inputs.verbose }}" = "true" ]; then
-          args="$args --verbose"
+        if [ "$INPUT_VERBOSE" = "true" ]; then
+          args+=(--verbose)
         fi
 
         set +e
-        eval npx vercel-seo-audit@latest $args
+        npx vercel-seo-audit@2.5.0 "${args[@]}" # x-release-please-version
         EXIT_CODE=$?
         set -e
 
         echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-        if [ -n "${{ inputs.report }}" ]; then
-          if [ "${{ inputs.report }}" = "json" ]; then
+        if [ -n "$INPUT_REPORT" ]; then
+          if [ "$INPUT_REPORT" = "json" ]; then
             echo "report-path=report.json" >> "$GITHUB_OUTPUT"
-          elif [ "${{ inputs.report }}" = "md" ]; then
+          elif [ "$INPUT_REPORT" = "md" ]; then
             echo "report-path=report.md" >> "$GITHUB_OUTPUT"
           fi
         fi

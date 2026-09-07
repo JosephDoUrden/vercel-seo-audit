@@ -276,7 +276,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: JosephDoUrden/vercel-seo-audit@v1
+      - uses: JosephDoUrden/vercel-seo-audit@vercel-seo-audit-v2.5.0
         with:
           url: https://your-site.com
           strict: true

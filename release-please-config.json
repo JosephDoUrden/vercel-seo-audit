@@ -9,7 +9,8 @@
       "bump-patch-for-minor-pre-major": true,
       "extra-files": [
         "src/cli.ts",
-        "src/constants.ts"
+        "src/constants.ts",
+        "action.yml"
       ],
       "exclude-paths": [
         "site"
