@@ -33,7 +33,8 @@ jobs:
 
   publish:
     needs: release-please
-    if: needs.release-please.outputs.releases_created == 'true'
+    # Runs after a release, or by hand when a release exists on npm's side but the publish failed.
+    if: needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,22 +46,19 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
+      # Trusted publishing (OIDC) needs npm 11.5.1 or newer; Node 22 ships npm 10.
+      - run: npm install -g npm@11
+      - run: npm --version
       - run: npm ci
       - run: npm run build
       - run: npm test
+      # No token: npm authenticates the job through GitHub's OIDC token (trusted publisher set on
+      # npmjs.com for this repo and workflow file). Provenance is attached automatically.
       - name: Publish to npm
-        if: env.NODE_AUTH_TOKEN != ''
         run: |
           VERSION=$(node -p "require('./package.json').version")
           if npm view "vercel-seo-audit@${VERSION}" version >/dev/null 2>&1; then
-            echo "::warning::v${VERSION} already published — skipping."
+            echo "::warning::v${VERSION} already published, skipping."
           else
             npm publish --provenance --access public
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Skip publish (no token)
-        if: env.NODE_AUTH_TOKEN == ''
-        run: echo "::warning::NPM_TOKEN secret not set — skipping npm publish."
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
