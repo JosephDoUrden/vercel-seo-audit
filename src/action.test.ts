@@ -95,10 +95,17 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
     argsFile = join(work, 'npx-args');
     outputFile = join(work, 'github-output');
     writeFileSync(outputFile, '');
-    // Stand-in for npx: record argv one per line, exit with NPX_EXIT_CODE.
+    // Stand-in for npx: record argv one per line, optionally write the report
+    // file the real CLI would have written, exit with NPX_EXIT_CODE.
     writeFileSync(
       join(bin, 'npx'),
-      '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$NPX_ARGS_FILE"\nexit "${NPX_EXIT_CODE:-0}"\n',
+      [
+        '#!/bin/sh',
+        'printf \'%s\\n\' "$@" > "$NPX_ARGS_FILE"',
+        'if [ -n "$NPX_WRITE_REPORT" ]; then echo "{}" > "$NPX_WRITE_REPORT"; fi',
+        'exit "${NPX_EXIT_CODE:-0}"',
+        '',
+      ].join('\n'),
       { mode: 0o755 },
     );
   });
@@ -107,7 +114,7 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
     rmSync(work, { recursive: true, force: true });
   });
 
-  function run(inputs: Record<string, string>, npxExit = 0) {
+  function run(inputs: Record<string, string>, npxExit = 0, writeReport = '') {
     const [script] = runBlocks();
     const scriptPath = join(work, 'step.sh');
     writeFileSync(scriptPath, script);
@@ -116,6 +123,7 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
       GITHUB_OUTPUT: outputFile,
       NPX_ARGS_FILE: argsFile,
       NPX_EXIT_CODE: String(npxExit),
+      NPX_WRITE_REPORT: writeReport,
       INPUT_URL: '',
       INPUT_STRICT: 'false',
       INPUT_USER_AGENT: '',
@@ -132,7 +140,13 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
       encoding: 'utf8',
     });
     const argv = existsSync(argsFile) ? readFileSync(argsFile, 'utf8').split('\n').slice(0, -1) : null;
-    return { status: result.status, stderr: result.stderr, argv, output: readFileSync(outputFile, 'utf8') };
+    return {
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      argv,
+      output: readFileSync(outputFile, 'utf8'),
+    };
   }
 
   it('passes hostile input to npx as literal arguments', () => {
@@ -147,17 +161,18 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
       INPUT_REPORT: 'json',
       INPUT_TIMEOUT: '5000',
       INPUT_VERBOSE: 'true',
-    });
+    }, 0, 'report.json');
     expect(r.status, r.stderr).toBe(0);
     expect(r.argv).toEqual([
       expect.stringMatching(/^vercel-seo-audit@\d+\.\d+\.\d+$/),
-      url,
       '--strict',
       '--user-agent', ua,
       '--pages', pages,
       '--report', 'json',
       '--timeout', '5000',
       '--verbose',
+      '--',
+      url,
     ]);
     for (const c of ['canary-a', 'canary-b', 'canary-c', 'canary-d']) {
       expect(existsSync(join(work, c)), c).toBe(false);
@@ -169,15 +184,102 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
   it('sends only the url when every optional input is at its default', () => {
     const r = run({ INPUT_URL: 'https://example.com' });
     expect(r.status, r.stderr).toBe(0);
-    expect(r.argv).toHaveLength(2);
-    expect(r.argv![1]).toBe('https://example.com');
+    expect(r.argv).toEqual([
+      expect.stringMatching(/^vercel-seo-audit@\d+\.\d+\.\d+$/),
+      '--',
+      'https://example.com',
+    ]);
     expect(r.output).toBe('exit-code=0\n');
   });
 
-  it('propagates the audit exit code and reports the md path', () => {
-    const r = run({ INPUT_URL: 'https://example.com', INPUT_REPORT: 'md' }, 1);
+  // A url that starts with "-" must reach the CLI as the positional argument,
+  // never as a flag (commander stops option parsing at "--").
+  it('passes a url that starts with a dash after the -- separator', () => {
+    const url = '--diff=../../../../../../../../etc/passwd';
+    const r = run({ INPUT_URL: url });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.argv).toEqual([
+      expect.stringMatching(/^vercel-seo-audit@\d+\.\d+\.\d+$/),
+      '--',
+      url,
+    ]);
+    expect(r.argv!.indexOf('--')).toBeLessThan(r.argv!.indexOf(url));
+  });
+
+  it('keeps every flag before the -- separator', () => {
+    const r = run({ INPUT_URL: '-', INPUT_STRICT: 'true', INPUT_REPORT: 'md' });
+    expect(r.status, r.stderr).toBe(0);
+    const sep = r.argv!.indexOf('--');
+    expect(sep).toBeGreaterThan(0);
+    expect(r.argv!.slice(sep)).toEqual(['--', '-']);
+    expect(r.argv!.slice(1, sep)).toEqual(['--strict', '--report', 'md']);
+  });
+
+  it('refuses an empty url instead of passing an empty argument', () => {
+    const r = run({ INPUT_URL: '' });
+    expect(r.status).toBe(2);
+    expect(r.argv).toBeNull();
+    expect(r.stderr + r.stdout).toContain('::error::');
+    expect(r.output).toBe('');
+  });
+
+  it('omits --timeout when the timeout input is empty', () => {
+    const r = run({ INPUT_URL: 'https://example.com', INPUT_TIMEOUT: '' });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.argv).toEqual([
+      expect.stringMatching(/^vercel-seo-audit@\d+\.\d+\.\d+$/),
+      '--',
+      'https://example.com',
+    ]);
+  });
+
+  it('forwards a non-default timeout', () => {
+    const r = run({ INPUT_URL: 'https://example.com', INPUT_TIMEOUT: '2500' });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.argv).toEqual([
+      expect.stringMatching(/^vercel-seo-audit@\d+\.\d+\.\d+$/),
+      '--timeout', '2500',
+      '--',
+      'https://example.com',
+    ]);
+  });
+
+  it('omits every optional flag whose input is empty', () => {
+    const r = run({
+      INPUT_URL: 'https://example.com',
+      INPUT_STRICT: '',
+      INPUT_USER_AGENT: '',
+      INPUT_PAGES: '',
+      INPUT_REPORT: '',
+      INPUT_TIMEOUT: '',
+      INPUT_VERBOSE: '',
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.argv).toEqual([
+      expect.stringMatching(/^vercel-seo-audit@\d+\.\d+\.\d+$/),
+      '--',
+      'https://example.com',
+    ]);
+    expect(r.output).toBe('exit-code=0\n');
+  });
+
+  it('propagates exit code 1 and reports the md path when the file was written', () => {
+    const r = run({ INPUT_URL: 'https://example.com', INPUT_REPORT: 'md' }, 1, 'report.md');
     expect(r.status).toBe(1);
     expect(r.output).toContain('exit-code=1\n');
     expect(r.output).toContain('report-path=report.md\n');
+  });
+
+  it('does not report a path when the audit crashed without writing the file', () => {
+    const r = run({ INPUT_URL: 'https://example.com', INPUT_REPORT: 'md' }, 2);
+    expect(r.status).toBe(2);
+    expect(r.output).toBe('exit-code=2\n');
+    expect(r.output).not.toContain('report-path');
+  });
+
+  it('does not report a path when the file is missing even on exit 0', () => {
+    const r = run({ INPUT_URL: 'https://example.com', INPUT_REPORT: 'json' }, 0);
+    expect(r.status).toBe(0);
+    expect(r.output).toBe('exit-code=0\n');
   });
 });

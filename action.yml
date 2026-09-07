@@ -61,7 +61,12 @@ runs:
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
       run: |
-        args=("$INPUT_URL")
+        if [ -z "$INPUT_URL" ]; then
+          echo "::error::url input is required"
+          exit 2
+        fi
+
+        args=()
 
         if [ "$INPUT_STRICT" = "true" ]; then
           args+=(--strict)
@@ -79,7 +84,7 @@ runs:
           args+=(--report "$INPUT_REPORT")
         fi
 
-        if [ "$INPUT_TIMEOUT" != "10000" ]; then
+        if [ -n "$INPUT_TIMEOUT" ] && [ "$INPUT_TIMEOUT" != "10000" ]; then
           args+=(--timeout "$INPUT_TIMEOUT")
         fi
 
@@ -87,19 +92,19 @@ runs:
           args+=(--verbose)
         fi
 
+        # "--" ends option parsing, so a url starting with "-" is a url, not a flag.
         set +e
-        npx vercel-seo-audit@2.5.0 "${args[@]}" # x-release-please-version
+        npx vercel-seo-audit@2.5.0 "${args[@]}" -- "$INPUT_URL" # x-release-please-version
         EXIT_CODE=$?
         set -e
 
         echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
-        if [ -n "$INPUT_REPORT" ]; then
-          if [ "$INPUT_REPORT" = "json" ]; then
-            echo "report-path=report.json" >> "$GITHUB_OUTPUT"
-          elif [ "$INPUT_REPORT" = "md" ]; then
-            echo "report-path=report.md" >> "$GITHUB_OUTPUT"
-          fi
+        # Only report a path for a file the audit actually wrote.
+        if [ "$INPUT_REPORT" = "json" ] && [ -f report.json ]; then
+          echo "report-path=report.json" >> "$GITHUB_OUTPUT"
+        elif [ "$INPUT_REPORT" = "md" ] && [ -f report.md ]; then
+          echo "report-path=report.md" >> "$GITHUB_OUTPUT"
         fi
 
-        exit $EXIT_CODE
+        exit "$EXIT_CODE"

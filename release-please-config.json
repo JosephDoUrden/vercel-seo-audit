@@ -10,7 +10,8 @@
       "extra-files": [
         "src/cli.ts",
         "src/constants.ts",
-        "action.yml"
+        "action.yml",
+        "README.md"
       ],
       "exclude-paths": [
         "site"
