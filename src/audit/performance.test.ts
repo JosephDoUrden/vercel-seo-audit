@@ -82,6 +82,68 @@ describe('auditPerformance', () => {
     expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
   });
 
+  it('does not flag JSON-LD data blocks', async () => {
+    const ld = '<script type="application/ld+json">{"@context":"https://schema.org"}</script>';
+    const html = `<html><head>${ld}${ld}${ld}</head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
+  });
+
+  it('does not flag importmap or speculationrules', async () => {
+    const html = `<html><head><script type="importmap">{"imports":{}}</script><script type="speculationrules">{"prerender":[]}</script></head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
+  });
+
+  it('does not flag inline scripts without src', async () => {
+    const html = `<html><head><script>window.dataLayer = [];</script></head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
+  });
+
+  it('flags external scripts with an explicit JavaScript type', async () => {
+    const html = `<html><head><script type="text/javascript" src="/legacy.js"></script></head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeDefined();
+  });
+
+  it('reads attributes, not substrings of attribute values', async () => {
+    const html = `<html><head><script src="/vendor/async-defer.js"></script></head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeDefined();
+  });
+
+  it('treats an empty type as classic and a MIME parameter or blank type as a data block', async () => {
+    const empty = `<html><head><script type="" src="/a.js"></script></head><body></body></html>`;
+    const param = `<html><head><script type="text/javascript; charset=utf-8" src="/a.js"></script></head><body></body></html>`;
+    const blank = `<html><head><script type="   " src="/a.js"></script></head><body></body></html>`;
+    expect((await auditPerformance(makeCtx(empty))).find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeDefined();
+    expect((await auditPerformance(makeCtx(param))).find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
+    expect((await auditPerformance(makeCtx(blank))).find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
+  });
+
+  it('does not read script tags out of JSON-LD text or comments', async () => {
+    const html = `<html><head><!-- <script src="/old.js"></script> --><script type="application/ld+json">{"d":"<script src=\\"/x.js\\">"}</script></head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
+  });
+
+  it('uses the singular message for one script', async () => {
+    const html = `<html><head><script src="/a.js"></script></head><body></body></html>`;
+    const f = (await auditPerformance(makeCtx(html))).find((f) => f.code === 'RENDER_BLOCKING_SCRIPT');
+    expect(f!.message).toBe('1 render-blocking <script> tag in <head> without async or defer');
+    expect(f!.details).toEqual({ count: 1, srcs: ['/a.js'] });
+  });
+
+  it('collapses several blocking scripts into one finding with a count', async () => {
+    const html = `<html><head><script src="/a.js"></script><script src=/b.js></script><script src="/c.js" defer></script></head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    const hits = findings.filter((f) => f.code === 'RENDER_BLOCKING_SCRIPT');
+    expect(hits).toHaveLength(1);
+    expect(hits[0].details).toEqual({ count: 2, srcs: ['/a.js', '/b.js'] });
+    expect(hits[0].message).toContain('2 render-blocking');
+  });
+
   it('detects large inline style', async () => {
     const bigCss = 'a'.repeat(51 * 1024);
     const html = `<html><head><style>${bigCss}</style></head><body></body></html>`;
