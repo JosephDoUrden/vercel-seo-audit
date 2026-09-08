@@ -10,3 +10,4 @@ export { auditI18n } from './i18n.js';
 export { auditImages } from './images.js';
 export { auditSecurity } from './security.js';
 export { auditPerformance } from './performance.js';
+export { auditVercel } from './vercel.js';

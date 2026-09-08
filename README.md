@@ -239,6 +239,22 @@ Progress is printed to stderr as each page is crawled.
 * Detect Next.js trailing slash redirect behaviour
 * Middleware rewrite/redirect headers (best-effort)
 
+### Vercel platform
+
+Header-based checks that only make sense on Vercel's CDN. They read the page response
+already fetched for the other modules and make no requests of their own. Off Vercel
+(no `server: Vercel` and no `x-vercel-id`) the module reports that once and stops.
+
+* `x-vercel-cache: MISS` or `STALE` on a page the CDN could store (no `set-cookie`,
+  no `private` / `no-store` / `no-cache`, no `Vary: *`)
+* No `cache-control` at all, or a `cdn-cache-control` without a lifetime, on a page that missed the cache
+* CDN lifetime below 60 seconds, and a lifetime without `stale-while-revalidate`. Vercel
+  consumes `s-maxage` and `stale-while-revalidate` before the client sees them, so these
+  two only fire when the directives are visible, which in practice means `CDN-Cache-Control` is set
+* A `*.vercel.app` URL without `x-robots-tag: noindex` or a robots meta `noindex`. Branch
+  URLs (`<project>-git-<branch>-<scope>.vercel.app`) are always previews and get an
+  error; other generated URLs can be the production deployment itself and get a warning
+
 ---
 
 ## Severity & exit codes
@@ -370,6 +386,22 @@ npx vercel-seo-audit https://your-site.com --report md
 * [ ] Accessibility basics audit ([#45](https://github.com/JosephDoUrden/vercel-seo-audit/issues/45))
 * [ ] Multi-URL batch auditing ([#46](https://github.com/JosephDoUrden/vercel-seo-audit/issues/46))
 * [ ] Plugin system for custom audit checks ([#47](https://github.com/JosephDoUrden/vercel-seo-audit/issues/47))
+
+---
+
+## What this does not do
+
+* **No JavaScript execution.** Pages are fetched and parsed as HTML. Anything rendered on the
+  client, including metadata injected by scripts, is invisible to the audit.
+* **No source reading.** It never opens `app/**`, `pages/**`, `next.config.js` or `vercel.json`;
+  it only sees what the deployed site sends back.
+* **No field Core Web Vitals.** The performance hints are static heuristics on the HTML. Real
+  user metrics need PageSpeed Insights or a RUM tool.
+* **No schema.org validation.** JSON-LD is checked for well-formedness and a few required
+  fields, not against the schema.org vocabulary.
+* **Vercel checks are header-based only.** They cannot see `s-maxage` the CDN has already
+  consumed, cannot tell a cold miss from an uncached page on one request, and cannot reach a
+  deployment behind Deployment Protection.
 
 ---
 

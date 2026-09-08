@@ -18,6 +18,7 @@ vi.mock('./audit/index.js', () => ({
   auditImages: vi.fn(),
   auditSecurity: vi.fn(),
   auditPerformance: vi.fn(),
+  auditVercel: vi.fn(),
 }));
 
 import { fetchPage } from './utils/http.js';
@@ -34,6 +35,7 @@ import {
   auditImages,
   auditSecurity,
   auditPerformance,
+  auditVercel,
 } from './audit/index.js';
 
 const mockFetchPage = vi.mocked(fetchPage);
@@ -49,6 +51,7 @@ const mockI18n = vi.mocked(auditI18n);
 const mockImages = vi.mocked(auditImages);
 const mockSecurity = vi.mocked(auditSecurity);
 const mockPerformance = vi.mocked(auditPerformance);
+const mockVercel = vi.mocked(auditVercel);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -73,6 +76,7 @@ beforeEach(() => {
   mockImages.mockResolvedValue([]);
   mockSecurity.mockResolvedValue([]);
   mockPerformance.mockResolvedValue([]);
+  mockVercel.mockResolvedValue([]);
 });
 
 describe('runAudit', () => {
@@ -93,7 +97,7 @@ describe('runAudit', () => {
     expect(mockRedirects).toHaveBeenCalledTimes(1);
   });
 
-  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security, performance)', async () => {
+  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security, performance, vercel)', async () => {
     await runAudit('https://example.com');
 
     expect(mockSitemap).toHaveBeenCalledTimes(1);
@@ -105,6 +109,7 @@ describe('runAudit', () => {
     expect(mockImages).toHaveBeenCalledTimes(1);
     expect(mockSecurity).toHaveBeenCalledTimes(1);
     expect(mockPerformance).toHaveBeenCalledTimes(1);
+    expect(mockVercel).toHaveBeenCalledTimes(1);
   });
 
   it('does not run crawl module when crawl option is not set', async () => {
@@ -222,6 +227,7 @@ describe('runAudit', () => {
     expect(names).toContain('images');
     expect(names).toContain('security');
     expect(names).toContain('performance');
+    expect(names).toContain('vercel');
   });
 
   it('fetches the page once up front and shares it with every module', async () => {
