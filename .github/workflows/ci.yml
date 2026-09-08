@@ -26,3 +26,18 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:coverage
+
+  # One stable check name for the branch ruleset to require. Matrix legs rename themselves when the
+  # matrix changes and a skipped leg leaves a PR waiting forever, so the ruleset points at this job
+  # only. It fails unless every build leg succeeded.
+  gate:
+    name: gate
+    if: always()
+    needs: [build]
+    runs-on: ubuntu-latest
+    env:
+      BUILD: ${{ needs.build.result }}
+    steps:
+      - run: |
+          echo "build=$BUILD"
+          test "$BUILD" = success
