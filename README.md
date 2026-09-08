@@ -304,7 +304,8 @@ jobs:
           report: json
 ```
 
-The pinned tag is updated on each release.
+The pinned tag above is updated on each release. `@v2` also works and follows the latest 2.x release; a
+workflow moves it after every publish. For a build that never changes underneath you, pin the commit SHA.
 
 All inputs:
 
