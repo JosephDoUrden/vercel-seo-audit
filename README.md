@@ -248,9 +248,11 @@ already fetched for the other modules and make no requests of their own. Off Ver
 * `x-vercel-cache: MISS` or `STALE` on a page the CDN could store (no `set-cookie`,
   no `private` / `no-store` / `no-cache`, no `Vary: *`)
 * No `cache-control` at all, or a `cdn-cache-control` without a lifetime, on a page that missed the cache
-* CDN lifetime below 60 seconds, and a lifetime without `stale-while-revalidate`. Vercel
-  consumes `s-maxage` and `stale-while-revalidate` before the client sees them, so these
-  two only fire when the directives are visible, which in practice means `CDN-Cache-Control` is set
+* CDN lifetime below 60 seconds, and a lifetime without `stale-while-revalidate`. These read
+  `s-maxage` from `cache-control`, or `s-maxage` / `max-age` from `cdn-cache-control` when that
+  header is present (it overrides `cache-control` entirely). Vercel normally consumes `s-maxage`
+  before the client sees it, so a lifetime is only readable when it comes through. `s-maxage=0`
+  is treated as deliberately uncached
 * A `*.vercel.app` URL without `x-robots-tag: noindex` or a robots meta `noindex`. Branch
   URLs (`<project>-git-<branch>-<scope>.vercel.app`) are always previews and get an
   error; other generated URLs can be the production deployment itself and get a warning

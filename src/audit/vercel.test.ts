@@ -148,13 +148,28 @@ describe('auditVercel', () => {
       expect(codes(findings)).toContain('VERCEL_CACHE_CONTROL_MISSING');
     });
 
-    it('does not warn on the ambiguous default cache-control after a miss', async () => {
-      // Vercel strips s-maxage before the client sees it, so this could be a cold miss.
+    it('warns on the default cache-control after a miss, naming the lifetime not the header', async () => {
       const findings = await auditVercel(makeCtx({ headers: { ...VERCEL_HIT, 'x-vercel-cache': 'MISS' } }));
+      const f = findings.find((x) => x.code === 'VERCEL_CACHE_CONTROL_MISSING');
+      expect(f).toBeDefined();
+      expect(f!.message).toMatch(/no CDN lifetime/i);
+      expect(f!.message).not.toMatch(/no cache-control header/i);
+    });
+
+    it('warns on an empty cache-control after a miss', async () => {
+      const findings = await auditVercel(makeCtx({ headers: { ...VERCEL_HIT, 'x-vercel-cache': 'MISS', 'cache-control': '' } }));
+      expect(codes(findings)).toContain('VERCEL_CACHE_CONTROL_MISSING');
+    });
+
+    it('does not warn about a missing header when cdn-cache-control carries the lifetime', async () => {
+      const { 'cache-control': _, ...rest } = VERCEL_HIT;
+      const findings = await auditVercel(
+        makeCtx({ headers: { ...rest, 'x-vercel-cache': 'MISS', 'cdn-cache-control': 'max-age=600, stale-while-revalidate=60' } }),
+      );
       expect(codes(findings)).toEqual(['VERCEL_CACHE_MISS']);
     });
 
-    it('does not warn when a lifetime is visible', async () => {
+    it('does not warn when a lifetime is visible in cdn-cache-control', async () => {
       const headers = { ...VERCEL_HIT, 'x-vercel-cache': 'MISS', 'cdn-cache-control': 'max-age=86400, stale-while-revalidate=60' };
       const findings = await auditVercel(makeCtx({ headers }));
       expect(codes(findings)).toEqual(['VERCEL_CACHE_MISS']);
@@ -172,15 +187,24 @@ describe('auditVercel', () => {
       const f = findings.find((x) => x.code === 'VERCEL_S_MAXAGE_SHORT');
       expect(f).toBeDefined();
       expect(f!.severity).toBe('info');
-      expect(f!.details).toMatchObject({ sMaxage: 1, floor: 60 });
+      expect(f!.details).toMatchObject({ lifetime: 1, directive: 's-maxage', source: 'cdn-cache-control', floor: 60 });
       expect(codes(findings)).not.toContain('VERCEL_SWR_MISSING');
     });
 
-    it('takes max-age from cdn-cache-control when s-maxage is absent', async () => {
+    it('takes max-age from cdn-cache-control when s-maxage is absent and says so in details', async () => {
       const headers = { ...VERCEL_HIT, 'cdn-cache-control': 'max-age=30' };
       const findings = await auditVercel(makeCtx({ headers }));
-      expect(codes(findings)).toContain('VERCEL_S_MAXAGE_SHORT');
-      expect(codes(findings)).toContain('VERCEL_SWR_MISSING');
+      const short = findings.find((x) => x.code === 'VERCEL_S_MAXAGE_SHORT');
+      expect(short!.details).toMatchObject({ lifetime: 30, directive: 'max-age', source: 'cdn-cache-control' });
+      const swr = findings.find((x) => x.code === 'VERCEL_SWR_MISSING');
+      expect(swr!.details).toMatchObject({ lifetime: 30, directive: 'max-age', source: 'cdn-cache-control' });
+    });
+
+    it('names cache-control as the source when the lifetime came from it', async () => {
+      const headers = { ...VERCEL_HIT, 'cache-control': 'public, s-maxage=30' };
+      const findings = await auditVercel(makeCtx({ headers }));
+      const short = findings.find((x) => x.code === 'VERCEL_S_MAXAGE_SHORT');
+      expect(short!.details).toMatchObject({ lifetime: 30, directive: 's-maxage', source: 'cache-control' });
     });
 
     it('reports a short s-maxage when cache-control reaches the client with it', async () => {
@@ -221,6 +245,32 @@ describe('auditVercel', () => {
       expect(findings).toHaveLength(0);
     });
 
+    it('ignores stale-while-revalidate in cache-control when cdn-cache-control is present', async () => {
+      const headers = { ...VERCEL_HIT, 'cdn-cache-control': 's-maxage=30', 'cache-control': 'public, stale-while-revalidate=600' };
+      const findings = await auditVercel(makeCtx({ headers }));
+      expect(codes(findings)).toContain('VERCEL_SWR_MISSING');
+    });
+
+    it('treats s-maxage=0 as deliberately uncached', async () => {
+      const headers = { ...VERCEL_HIT, 'x-vercel-cache': 'MISS', 'cdn-cache-control': 's-maxage=0' };
+      const findings = await auditVercel(makeCtx({ headers }));
+      expect(codes(findings)).toEqual(['VERCEL_CACHE_MISS']);
+    });
+
+    it('counts a bare stale-while-revalidate as present', async () => {
+      const headers = { ...VERCEL_HIT, 'cdn-cache-control': 's-maxage=3600, stale-while-revalidate' };
+      const findings = await auditVercel(makeCtx({ headers }));
+      expect(codes(findings)).not.toContain('VERCEL_SWR_MISSING');
+    });
+
+    it('parses whitespace around the equals sign', async () => {
+      const headers = { ...VERCEL_HIT, 'cdn-cache-control': 's-maxage = 10 , stale-while-revalidate = 59' };
+      const findings = await auditVercel(makeCtx({ headers }));
+      const short = findings.find((x) => x.code === 'VERCEL_S_MAXAGE_SHORT');
+      expect(short!.details).toMatchObject({ lifetime: 10 });
+      expect(codes(findings)).not.toContain('VERCEL_SWR_MISSING');
+    });
+
     it('ignores a non-numeric s-maxage', async () => {
       const headers = { ...VERCEL_HIT, 'cdn-cache-control': 's-maxage=abc' };
       const findings = await auditVercel(makeCtx({ headers }));
@@ -259,6 +309,56 @@ describe('auditVercel', () => {
       );
       expect(codes(findings)).not.toContain('VERCEL_PREVIEW_INDEXABLE');
     });
+
+    it('treats x-robots-tag: none as noindex', async () => {
+      const findings = await auditVercel(
+        makeCtx({ headers: { ...VERCEL_HIT, 'x-robots-tag': 'none' }, finalUrl: 'https://my-app-git-feature-acme.vercel.app/' }),
+      );
+      expect(codes(findings)).not.toContain('VERCEL_PREVIEW_INDEXABLE');
+    });
+
+    it('does not treat nonexistent directive text as noindex', async () => {
+      const findings = await auditVercel(
+        makeCtx({ headers: { ...VERCEL_HIT, 'x-robots-tag': 'nonexistent' }, finalUrl: 'https://my-app-git-feature-acme.vercel.app/' }),
+      );
+      expect(codes(findings)).toContain('VERCEL_PREVIEW_INDEXABLE');
+    });
+
+    it('is satisfied by an upper-case robots meta noindex', async () => {
+      const findings = await auditVercel(
+        makeCtx({
+          headers: VERCEL_HIT,
+          html: '<html><head><meta name="ROBOTS" content="NOINDEX"></head></html>',
+          finalUrl: 'https://my-app-git-feature-acme.vercel.app/',
+        }),
+      );
+      expect(codes(findings)).not.toContain('VERCEL_PREVIEW_INDEXABLE');
+    });
+
+    it('does not read a commit url of a project named with git as a branch preview', async () => {
+      const findings = await auditVercel(
+        makeCtx({ headers: VERCEL_HIT, finalUrl: 'https://my-git-tools-a1b2c3d4e-acme.vercel.app/' }),
+      );
+      const f = findings.find((x) => x.code === 'VERCEL_PREVIEW_INDEXABLE');
+      expect(f).toBeDefined();
+      expect(f!.severity).toBe('warning');
+    });
+
+    it('still reads a branch named with nine plain letters as a preview', async () => {
+      const findings = await auditVercel(
+        makeCtx({ headers: VERCEL_HIT, finalUrl: 'https://app-git-mybranchx-acme.vercel.app/' }),
+      );
+      expect(findings.find((x) => x.code === 'VERCEL_PREVIEW_INDEXABLE')!.severity).toBe('error');
+    });
+
+    it.each(['git-feature-acme.vercel.app', 'app-git-acme.vercel.app', 'app-git-.vercel.app'])(
+      'does not read %s as a branch preview',
+      async (host) => {
+        const findings = await auditVercel(makeCtx({ headers: VERCEL_HIT, finalUrl: `https://${host}/` }));
+        const f = findings.find((x) => x.code === 'VERCEL_PREVIEW_INDEXABLE');
+        expect(f!.severity).toBe('warning');
+      },
+    );
 
     it('is satisfied by a robots meta noindex in the html', async () => {
       const findings = await auditVercel(

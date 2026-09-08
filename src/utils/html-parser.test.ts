@@ -61,6 +61,15 @@ describe('getNoindexDirective', () => {
   it('is case-insensitive', () => {
     expect(getNoindexDirective(html('<meta name="robots" content="NOINDEX">'))).toBe(true);
   });
+
+  it('matches the meta name case-insensitively', () => {
+    expect(getNoindexDirective(html('<meta name="ROBOTS" content="noindex">'))).toBe(true);
+    expect(getNoindexDirective(html('<meta name="GoogleBot" content="noindex">'))).toBe(true);
+  });
+
+  it('ignores other meta names that mention noindex', () => {
+    expect(getNoindexDirective(html('<meta name="description" content="noindex">'))).toBe(false);
+  });
 });
 
 describe('getMetaRefresh', () => {
