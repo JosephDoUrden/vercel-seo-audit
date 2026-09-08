@@ -14,7 +14,8 @@ export function getNoindexDirective(html: string): boolean {
     .some((el) => {
       const name = ($(el).attr('name') ?? '').trim().toLowerCase();
       if (name !== 'robots' && name !== 'googlebot') return false;
-      return ($(el).attr('content') ?? '').toLowerCase().includes('noindex');
+      // none means noindex, nofollow
+      return /\b(?:noindex|none)\b/i.test($(el).attr('content') ?? '');
     });
 }
 

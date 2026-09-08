@@ -247,7 +247,10 @@ already fetched for the other modules and make no requests of their own. Off Ver
 
 * `x-vercel-cache: MISS` or `STALE` on a page the CDN could store (no `set-cookie`,
   no `private` / `no-store` / `no-cache`, no `Vary: *`)
-* No `cache-control` at all, or a `cdn-cache-control` without a lifetime, on a page that missed the cache
+* A page that missed the cache with no CDN lifetime readable from its headers: no `s-maxage`
+  in `cache-control` (Vercel's default `public, max-age=0, must-revalidate` is the usual case),
+  or no `s-maxage` / `max-age` in `cdn-cache-control` when that header is present. `s-maxage=0`
+  counts as a lifetime, so a deliberate opt-out is not reported
 * CDN lifetime below 60 seconds, and a lifetime without `stale-while-revalidate`. These read
   `s-maxage` from `cache-control`, or `s-maxage` / `max-age` from `cdn-cache-control` when that
   header is present (it overrides `cache-control` entirely). Vercel normally consumes `s-maxage`

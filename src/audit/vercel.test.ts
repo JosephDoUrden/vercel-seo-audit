@@ -126,6 +126,21 @@ describe('auditVercel', () => {
       expect(findings).toHaveLength(0);
     });
 
+    it('judges storability from cdn-cache-control alone when it is present', async () => {
+      // Browser told not to store, CDN told to cache: a documented Vercel pattern.
+      const headers = { ...VERCEL_HIT, 'x-vercel-cache': 'MISS', 'cache-control': 'no-store', 'cdn-cache-control': 's-maxage=30' };
+      const findings = await auditVercel(makeCtx({ headers }));
+      expect(codes(findings)).toContain('VERCEL_CACHE_MISS');
+      expect(codes(findings)).toContain('VERCEL_S_MAXAGE_SHORT');
+      expect(codes(findings)).not.toContain('VERCEL_CACHE_CONTROL_MISSING');
+    });
+
+    it('still honours set-cookie and Vary: * when cdn-cache-control is present', async () => {
+      const base = { ...VERCEL_HIT, 'x-vercel-cache': 'MISS', 'cdn-cache-control': 's-maxage=30' };
+      expect(await auditVercel(makeCtx({ headers: { ...base, 'set-cookie': 'a=b' } }))).toHaveLength(0);
+      expect(await auditVercel(makeCtx({ headers: { ...base, vary: '*' } }))).toHaveLength(0);
+    });
+
     it('does not report a miss when cdn-cache-control opts out', async () => {
       const headers = { ...VERCEL_HIT, 'x-vercel-cache': 'MISS', 'cdn-cache-control': 'no-store' };
       const findings = await auditVercel(makeCtx({ headers }));
@@ -154,6 +169,14 @@ describe('auditVercel', () => {
       expect(f).toBeDefined();
       expect(f!.message).toMatch(/no CDN lifetime/i);
       expect(f!.message).not.toMatch(/no cache-control header/i);
+    });
+
+    it('names the header that is present when only cdn-cache-control lacks a lifetime', async () => {
+      const { 'cache-control': _, ...rest } = VERCEL_HIT;
+      const findings = await auditVercel(makeCtx({ headers: { ...rest, 'x-vercel-cache': 'MISS', 'cdn-cache-control': 'no-transform' } }));
+      const f = findings.find((x) => x.code === 'VERCEL_CACHE_CONTROL_MISSING');
+      expect(f!.message).toMatch(/no CDN lifetime in cdn-cache-control/i);
+      expect(f!.message).not.toMatch(/in cache-control/i);
     });
 
     it('warns on an empty cache-control after a miss', async () => {

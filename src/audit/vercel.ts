@@ -125,8 +125,10 @@ export async function auditVercel(ctx: AuditContext): Promise<AuditFinding[]> {
   const cdnCacheControl = headers['cdn-cache-control'];
   const cc = parseDirectives(cacheControl);
   const cdn = parseDirectives(cdnCacheControl);
+  // CDN-Cache-Control overrides Cache-Control for the CDN, so a browser-only no-store beside
+  // a CDN lifetime is still storable.
   const personalised =
-    'set-cookie' in headers || optsOut(cc) || optsOut(cdn) || (headers['vary'] ?? '').trim() === '*';
+    'set-cookie' in headers || optsOut(cdn ?? cc) || (headers['vary'] ?? '').trim() === '*';
   if (personalised) return findings;
 
   const status = (headers['x-vercel-cache'] ?? '').toUpperCase();
@@ -172,14 +174,14 @@ export async function auditVercel(ctx: AuditContext): Promise<AuditFinding[]> {
   const swr = cdn ? cdn.has('stale-while-revalidate') : !!cc?.has('stale-while-revalidate');
 
   if (status === 'MISS' && ttl === undefined) {
-    const noHeader = cc === undefined && cdn === undefined;
+    const present = [cdn && 'cdn-cache-control', cc && 'cache-control'].filter(Boolean).join(' or ');
     findings.push({
       code: 'VERCEL_CACHE_CONTROL_MISSING',
       severity: 'warning',
       category: 'vercel',
-      message: noHeader
-        ? 'No cache-control header on a page that missed the CDN cache'
-        : 'No CDN lifetime in cache-control on a page that missed the CDN cache',
+      message: present
+        ? `No CDN lifetime in ${present} on a page that missed the CDN cache`
+        : 'No cache-control header on a page that missed the CDN cache',
       explanation:
         'Without s-maxage (or max-age in cdn-cache-control) the CDN generates this page on every request. Vercel treats the default public, max-age=0, must-revalidate as no caching. Vercel also strips s-maxage before the client sees it, so a cold miss straight after a deploy looks the same; a second run settles it.',
       suggestion:
