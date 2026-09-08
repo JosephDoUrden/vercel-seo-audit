@@ -10,6 +10,7 @@ import {
   getFaviconLinks,
   getHreflangLinks,
   getImages,
+  getHeadScripts,
 } from './html-parser.js';
 
 function html(head: string): string {
@@ -329,5 +330,30 @@ describe('getImages', () => {
   it('skips images without src', () => {
     const images = getImages(body('<img alt="no src">'));
     expect(images).toHaveLength(0);
+  });
+});
+
+describe('getHeadScripts', () => {
+  it('extracts src, type and the boolean attributes', () => {
+    const scripts = getHeadScripts(
+      html('<script src="/a.js"></script><script type="application/ld+json">{}</script><script src="/b.js" async defer></script>')
+    );
+    expect(scripts).toEqual([
+      { src: '/a.js', type: null, async: false, defer: false },
+      { src: null, type: 'application/ld+json', async: false, defer: false },
+      { src: '/b.js', type: null, async: true, defer: true },
+    ]);
+  });
+
+  it('ignores scripts in body and in comments', () => {
+    const scripts = getHeadScripts(
+      '<html><head><!-- <script src="/old.js"></script> --></head><body><script src="/body.js"></script></body></html>'
+    );
+    expect(scripts).toHaveLength(0);
+  });
+
+  it('keeps a > inside a quoted attribute value', () => {
+    const scripts = getHeadScripts(html('<script data-cfg="a>b" src="/a.js"></script>'));
+    expect(scripts).toEqual([{ src: '/a.js', type: null, async: false, defer: false }]);
   });
 });

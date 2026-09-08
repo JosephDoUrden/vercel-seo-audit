@@ -121,6 +121,27 @@ export function getImages(html: string): ImageInfo[] {
   return images;
 }
 
+export interface HeadScript {
+  src: string | null;
+  type: string | null;
+  async: boolean;
+  defer: boolean;
+}
+
+export function getHeadScripts(html: string): HeadScript[] {
+  const $ = cheerio.load(html);
+  const scripts: HeadScript[] = [];
+  $('head script').each((_, el) => {
+    scripts.push({
+      src: $(el).attr('src') ?? null,
+      type: $(el).attr('type') ?? null,
+      async: $(el).attr('async') !== undefined,
+      defer: $(el).attr('defer') !== undefined,
+    });
+  });
+  return scripts;
+}
+
 export function getHreflangLinks(html: string): HreflangLink[] {
   const $ = cheerio.load(html);
   const links: HreflangLink[] = [];
