@@ -62,3 +62,33 @@ jobs:
           else
             npm publish --provenance --access public
           fi
+
+  # The Marketplace example says `uses: JosephDoUrden/vercel-seo-audit@v1`. That tag only means
+  # something if it follows releases, so after every publish the v<major> tag is moved to the
+  # release commit. Moved through the API, so it is a plain tag, not a signed one, same as the
+  # major tags on actions/checkout and friends.
+  move-major-tag:
+    needs: [release-please, publish]
+    if: needs.release-please.outputs.releases_created == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Point v<major> at this release
+        run: |
+          MAJOR=$(node -p "require('./package.json').version.split('.')[0]")
+          TAG="v${MAJOR}"
+          if gh api "repos/${REPO}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${REPO}/git/refs/tags/${TAG}" -f sha="${SHA}" -F force=true >/dev/null
+            echo "moved ${TAG} to ${SHA}"
+          else
+            gh api -X POST "repos/${REPO}/git/refs" -f ref="refs/tags/${TAG}" -f sha="${SHA}" >/dev/null
+            echo "created ${TAG} at ${SHA}"
+          fi
