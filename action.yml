@@ -94,7 +94,7 @@ runs:
           target=(-- "$INPUT_URL")
         fi
         set +e
-        npx vercel-seo-audit@2.5.2 "${args[@]}" "${target[@]}" # x-release-please-version
+        npx vercel-seo-audit@2.5.3 "${args[@]}" "${target[@]}" # x-release-please-version
         EXIT_CODE=$?
         set -e
 

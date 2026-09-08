@@ -1,6 +1,6 @@
 {
   "name": "vercel-seo-audit",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "CLI tool that diagnoses SEO and indexing issues for Next.js/Vercel websites",
   "type": "module",
   "bin": {
