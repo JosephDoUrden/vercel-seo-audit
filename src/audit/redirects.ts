@@ -111,8 +111,8 @@ export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]>
 
   // 4. Meta refresh detection
   try {
-    const page = await fetchPage(normalizedUrl, fetchOptions);
-    const metaRefreshUrl = getMetaRefresh(page.body);
+    const html = ctx.html ?? (await fetchPage(normalizedUrl, fetchOptions)).body;
+    const metaRefreshUrl = getMetaRefresh(html);
 
     if (metaRefreshUrl) {
       findings.push({

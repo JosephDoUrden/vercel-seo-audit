@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runAudit } from './runner.js';
 
+vi.mock('./utils/http.js', () => ({
+  fetchPage: vi.fn(),
+}));
+
 vi.mock('./audit/index.js', () => ({
   auditRedirects: vi.fn(),
   auditRobots: vi.fn(),
@@ -16,6 +20,7 @@ vi.mock('./audit/index.js', () => ({
   auditPerformance: vi.fn(),
 }));
 
+import { fetchPage } from './utils/http.js';
 import {
   auditRedirects,
   auditRobots,
@@ -31,6 +36,7 @@ import {
   auditPerformance,
 } from './audit/index.js';
 
+const mockFetchPage = vi.mocked(fetchPage);
 const mockRedirects = vi.mocked(auditRedirects);
 const mockRobots = vi.mocked(auditRobots);
 const mockSitemap = vi.mocked(auditSitemap);
@@ -46,6 +52,13 @@ const mockPerformance = vi.mocked(auditPerformance);
 
 beforeEach(() => {
   vi.resetAllMocks();
+
+  mockFetchPage.mockResolvedValue({
+    body: '<html><head><title>Example</title></head></html>',
+    status: 200,
+    headers: new Headers({ 'x-powered-by': 'Next.js' }),
+    finalUrl: 'https://example.com/',
+  });
 
   // Default: all modules return empty findings
   mockRedirects.mockResolvedValue([]);
@@ -209,5 +222,57 @@ describe('runAudit', () => {
     expect(names).toContain('images');
     expect(names).toContain('security');
     expect(names).toContain('performance');
+  });
+
+  it('fetches the page once up front and shares it with every module', async () => {
+    await runAudit('https://example.com');
+
+    expect(mockFetchPage).toHaveBeenCalledTimes(1);
+    expect(mockFetchPage).toHaveBeenCalledWith(
+      'https://example.com/',
+      expect.objectContaining({ cache: expect.any(Map) }),
+    );
+
+    for (const mod of [mockRobots, mockRedirects, mockMetadata, mockNextjs, mockSecurity]) {
+      const ctx = mod.mock.calls[0][0];
+      expect(ctx.html).toBe('<html><head><title>Example</title></head></html>');
+      expect(ctx.headers).toEqual({ 'x-powered-by': 'Next.js' });
+      expect(ctx.finalUrl).toBe('https://example.com/');
+    }
+  });
+
+  it('gives every module the same per-audit fetch cache', async () => {
+    await runAudit('https://example.com');
+
+    const cache = mockRobots.mock.calls[0][0].fetchOptions.cache;
+    expect(cache).toBeInstanceOf(Map);
+    expect(mockMetadata.mock.calls[0][0].fetchOptions.cache).toBe(cache);
+  });
+
+  it('does not share a non-2xx page and empties the cache so modules refetch', async () => {
+    mockFetchPage.mockImplementation(async (_url, fetchOptions) => {
+      fetchOptions?.cache?.set('MANUAL https://example.com/', Promise.resolve(undefined));
+      return { body: 'boom', status: 500, headers: new Headers(), finalUrl: 'https://example.com/' };
+    });
+
+    await runAudit('https://example.com');
+
+    const ctx = mockMetadata.mock.calls[0][0];
+    expect(ctx.html).toBeUndefined();
+    expect(ctx.headers).toBeUndefined();
+    expect(ctx.finalUrl).toBeUndefined();
+    expect(ctx.fetchOptions.cache?.size).toBe(0);
+  });
+
+  it('leaves the shared page unset when the up-front fetch fails', async () => {
+    mockFetchPage.mockRejectedValue(new Error('timeout'));
+
+    const report = await runAudit('https://example.com');
+
+    expect(report.modules.map((m) => m.module)).toContain('metadata');
+    const ctx = mockMetadata.mock.calls[0][0];
+    expect(ctx.html).toBeUndefined();
+    expect(ctx.headers).toBeUndefined();
+    expect(ctx.finalUrl).toBeUndefined();
   });
 });

@@ -167,9 +167,14 @@ export interface RedirectChain {
   isCircular: boolean;
 }
 
+// In-flight and settled responses keyed by method and URL, shared by every
+// module of one audit so the same URL is never requested twice.
+export type FetchCache = Map<string, Promise<unknown>>;
+
 export interface FetchOptions {
   timeout?: number;
   userAgent?: string;
+  cache?: FetchCache;
 }
 
 export interface AuditContext {
@@ -180,6 +185,7 @@ export interface AuditContext {
   robotsTxt?: string;
   html?: string;
   headers?: Record<string, string>;
+  finalUrl?: string;
   pages?: string[];
   sitemapUrls?: string[];
   crawlLimit?: number;
