@@ -274,4 +274,14 @@ describe('auditRedirects', () => {
     const nonPass = findings.filter((f) => f.severity !== 'pass' && f.severity !== 'info');
     expect(nonPass).toHaveLength(0);
   });
+
+  it('checks meta refresh on the shared page without fetching again', async () => {
+    mockGetMetaRefresh.mockReturnValue('https://example.com/new');
+
+    const findings = await auditRedirects(makeCtx({ html: '<html>shared</html>' }));
+
+    expect(mockFetchPage).not.toHaveBeenCalled();
+    expect(mockGetMetaRefresh).toHaveBeenCalledWith('<html>shared</html>');
+    expect(findings.find((f) => f.code === 'META_REFRESH_REDIRECT')).toBeDefined();
+  });
 });

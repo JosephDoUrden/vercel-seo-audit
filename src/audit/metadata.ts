@@ -18,15 +18,22 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
   let headers: Headers;
   let finalUrl: string;
 
-  try {
-    const page = await fetchPage(normalizedUrl, fetchOptions);
-    html = page.body;
-    headers = page.headers;
-    finalUrl = page.finalUrl;
-    ctx.html = html;
-    ctx.headers = Object.fromEntries(headers.entries());
-  } catch {
-    return findings;
+  if (ctx.html && ctx.headers) {
+    html = ctx.html;
+    headers = new Headers(ctx.headers);
+    finalUrl = ctx.finalUrl ?? normalizedUrl;
+  } else {
+    try {
+      const page = await fetchPage(normalizedUrl, fetchOptions);
+      html = page.body;
+      headers = page.headers;
+      finalUrl = page.finalUrl;
+      ctx.html = html;
+      ctx.headers = Object.fromEntries(headers.entries());
+      ctx.finalUrl = finalUrl;
+    } catch {
+      return findings;
+    }
   }
 
   // 1. Noindex check — meta tag

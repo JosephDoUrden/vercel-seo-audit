@@ -280,4 +280,34 @@ describe('auditMetadata', () => {
     const findings = await auditMetadata(makeCtx());
     expect(findings.find((f) => f.code === 'CANONICAL_MISMATCH')).toBeUndefined();
   });
+
+  it('uses the shared page from ctx instead of fetching', async () => {
+    mockFetchHead.mockResolvedValue({ status: 200, headers: new Headers() });
+    const ctx = makeCtx({
+      html: FULL_HTML,
+      headers: { 'x-robots-tag': 'noindex' },
+      finalUrl: 'https://example.com/',
+    });
+
+    const findings = await auditMetadata(ctx);
+
+    expect(mockFetchPage).not.toHaveBeenCalled();
+    expect(findings.find((f) => f.code === 'X_ROBOTS_NOINDEX')).toBeDefined();
+    expect(findings.find((f) => f.code === 'CANONICAL_MISMATCH')).toBeUndefined();
+  });
+
+  it('resolves canonical against ctx.finalUrl when the shared page was redirected', async () => {
+    mockFetchHead.mockResolvedValue({ status: 200, headers: new Headers() });
+    const ctx = makeCtx({
+      html: '<html><head><link rel="canonical" href="/"></head></html>',
+      headers: {},
+      finalUrl: 'https://www.example.com/',
+    });
+
+    const findings = await auditMetadata(ctx);
+    const mismatch = findings.find((f) => f.code === 'CANONICAL_MISMATCH');
+
+    expect(mockFetchPage).not.toHaveBeenCalled();
+    expect(mismatch).toBeUndefined();
+  });
 });

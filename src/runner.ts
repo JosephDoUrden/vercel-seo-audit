@@ -6,6 +6,7 @@ import type {
   FetchOptions,
 } from './types.js';
 import { normalizeUrl } from './utils/url.js';
+import { fetchPage } from './utils/http.js';
 import {
   auditRedirects,
   auditRobots,
@@ -72,6 +73,7 @@ export async function runAudit(
   const fetchOptions: FetchOptions = {
     timeout: opts.timeout,
     userAgent: opts.userAgent,
+    cache: new Map(),
   };
 
   const ctx: AuditContext = {
@@ -82,6 +84,17 @@ export async function runAudit(
     pages: opts.pages,
     crawlLimit: opts.crawl,
   };
+
+  // Phase 0: fetch the page once and share it. When this fails the modules
+  // fall back to fetching for themselves and report what they can.
+  try {
+    const page = await fetchPage(normalized, fetchOptions);
+    ctx.html = page.body;
+    ctx.headers = Object.fromEntries(page.headers.entries());
+    ctx.finalUrl = page.finalUrl;
+  } catch {
+    // Left unset on purpose
+  }
 
   // Phase 1: robots + redirects (parallel)
   const phase1Results = await runModules(phase1Modules, ctx);
