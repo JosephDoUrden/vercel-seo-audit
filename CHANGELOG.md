@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.2](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.5.1...vercel-seo-audit-v2.5.2) (2026-09-08)
+
+
+### Bug Fixes
+
+* **audit:** only flag external classic scripts as render-blocking ([#120](https://github.com/JosephDoUrden/vercel-seo-audit/issues/120)) ([b459111](https://github.com/JosephDoUrden/vercel-seo-audit/commit/b45911126163985f9e8a73c4d4e6ecebf8b5f60d))
+
 ## [2.5.1](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.5.0...vercel-seo-audit-v2.5.1) (2026-09-07)
 
 
