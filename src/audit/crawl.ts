@@ -50,8 +50,11 @@ async function auditPage(
   let body: string;
   let status: number;
   let headers: Headers;
+  // Each crawled page is fetched once, so the audit cache would only pin every
+  // body in memory until the audit ends.
+  const { timeout, userAgent } = ctx.fetchOptions;
   try {
-    const res = await fetchPage(pageUrl, ctx.fetchOptions);
+    const res = await fetchPage(pageUrl, { timeout, userAgent });
     body = res.body;
     status = res.status;
     headers = res.headers;

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { runAudit } from './runner.js';
@@ -11,6 +11,7 @@ import { runAudit } from './runner.js';
 let server: Server;
 let origin = '';
 const counts = new Map<string, number>();
+let flakyHits = 0;
 
 function page(withMarkers: boolean): string {
   return `<!DOCTYPE html>
@@ -62,6 +63,12 @@ beforeAll(async () => {
         return send(200, 'text/html; charset=utf-8', page(true));
       case '/plain':
         return send(200, 'text/html; charset=utf-8', page(false));
+      case '/flaky':
+        // First GET fails, every later one serves the page.
+        if (req.method === 'GET' && flakyHits++ === 0) {
+          return send(500, 'text/plain', 'boom');
+        }
+        return send(200, 'text/html; charset=utf-8', page(true));
       case '/robots.txt':
         return send(200, 'text/plain', `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
       case '/sitemap.xml':
@@ -91,9 +98,13 @@ afterAll(async () => {
   );
 });
 
+beforeEach(() => {
+  counts.clear();
+  flakyHits = 0;
+});
+
 describe('request count for a single-URL audit', () => {
   it('fetches the page once and shares it across modules', async () => {
-    counts.clear();
     const report = await runAudit(`${origin}/`, { timeout: 5000 });
     const { total, byPath } = snapshot();
 
@@ -121,6 +132,18 @@ describe('request count for a single-URL audit', () => {
 
     expect(finding).toBeDefined();
     expect(finding).toMatchObject({ severity: 'info', category: 'nextjs', url: `${origin}/plain` });
+  });
+
+  it('does not share a non-2xx first response with the modules', async () => {
+    const report = await runAudit(`${origin}/flaky`, { timeout: 5000 });
+    const metadata = report.modules.find((m) => m.module === 'metadata');
+    const codes = metadata?.findings.map((f) => f.code) ?? [];
+
+    // The 500 is retried, not analysed: the modules see the real page.
+    expect(counts.get('GET /flaky')).toBe(2);
+    expect(codes).not.toContain('TITLE_MISSING');
+    expect(codes).not.toContain('DESCRIPTION_MISSING');
+    expect(codes).not.toContain('CANONICAL_MISSING');
   });
 
   it('does not report APP_ROUTER_METADATA when the markers are present', async () => {

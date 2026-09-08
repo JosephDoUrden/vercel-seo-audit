@@ -43,6 +43,28 @@ const GOOD_HTML = `<html><head>
 
 const BAD_HTML = '<html><head></head><body></body></html>';
 
+describe('auditCrawl fetch options', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockFetchPage.mockResolvedValue(makePage(GOOD_HTML, { finalUrl: 'https://example.com/page-1' }));
+  });
+
+  it('fetches crawled pages without the audit cache', async () => {
+    const ctx = makeCtx({
+      sitemapUrls: ['https://example.com/page-1'],
+      fetchOptions: { timeout: 1234, userAgent: 'bot', cache: new Map() },
+    });
+
+    await auditCrawl(ctx);
+
+    expect(mockFetchPage).toHaveBeenCalledWith('https://example.com/page-1', {
+      timeout: 1234,
+      userAgent: 'bot',
+    });
+    expect(ctx.fetchOptions.cache?.size).toBe(0);
+  });
+});
+
 function makeGoodHtml(pageUrl: string): string {
   return `<html><head>
   <title>Test Page</title>

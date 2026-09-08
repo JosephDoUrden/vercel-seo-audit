@@ -85,13 +85,18 @@ export async function runAudit(
     crawlLimit: opts.crawl,
   };
 
-  // Phase 0: fetch the page once and share it. When this fails the modules
-  // fall back to fetching for themselves and report what they can.
+  // Phase 0: fetch the page once and share it. A failed or non-2xx fetch is
+  // not shared and is dropped from the cache, so the modules try again for
+  // themselves and report what they can.
   try {
     const page = await fetchPage(normalized, fetchOptions);
-    ctx.html = page.body;
-    ctx.headers = Object.fromEntries(page.headers.entries());
-    ctx.finalUrl = page.finalUrl;
+    if (page.status >= 200 && page.status < 300) {
+      ctx.html = page.body;
+      ctx.headers = Object.fromEntries(page.headers.entries());
+      ctx.finalUrl = page.finalUrl;
+    } else {
+      fetchOptions.cache?.clear();
+    }
   } catch {
     // Left unset on purpose
   }

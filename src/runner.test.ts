@@ -249,6 +249,21 @@ describe('runAudit', () => {
     expect(mockMetadata.mock.calls[0][0].fetchOptions.cache).toBe(cache);
   });
 
+  it('does not share a non-2xx page and empties the cache so modules refetch', async () => {
+    mockFetchPage.mockImplementation(async (_url, fetchOptions) => {
+      fetchOptions?.cache?.set('MANUAL https://example.com/', Promise.resolve(undefined));
+      return { body: 'boom', status: 500, headers: new Headers(), finalUrl: 'https://example.com/' };
+    });
+
+    await runAudit('https://example.com');
+
+    const ctx = mockMetadata.mock.calls[0][0];
+    expect(ctx.html).toBeUndefined();
+    expect(ctx.headers).toBeUndefined();
+    expect(ctx.finalUrl).toBeUndefined();
+    expect(ctx.fetchOptions.cache?.size).toBe(0);
+  });
+
   it('leaves the shared page unset when the up-front fetch fails', async () => {
     mockFetchPage.mockRejectedValue(new Error('timeout'));
 

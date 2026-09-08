@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { FetchCache } from '../types.js';
 import { fetchPage, fetchHead, fetchWithoutRedirect, followRedirectChain } from './http.js';
 
@@ -45,19 +47,33 @@ describe('fetchPage', () => {
     expect(requestedUrls()).toEqual(['https://example.com/', 'https://example.com/landing']);
   });
 
-  it('falls back to a follow GET when the last hop body was already consumed', async () => {
+  it('reuses the page read through another URL that redirected to it', async () => {
     const cache: FetchCache = new Map();
     mockFetch
       .mockResolvedValueOnce(response(302, '', { location: '/b' }))
-      .mockResolvedValueOnce(response(200, '<html>b</html>'))
-      .mockResolvedValueOnce(response(200, '<html>b again</html>'));
+      .mockResolvedValueOnce(response(200, '<html>b</html>'));
 
     await fetchPage('https://example.com/a', { cache });
-    const again = await fetchPage('https://example.com/b', { cache });
+    const direct = await fetchPage('https://example.com/b', { cache });
 
-    expect(again.body).toBe('<html>b again</html>');
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-    expect(mockFetch.mock.calls[2][1]).toMatchObject({ redirect: 'follow' });
+    expect(direct.body).toBe('<html>b</html>');
+    expect(direct.finalUrl).toBe('https://example.com/b');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to a follow GET when something else consumed the cached response', async () => {
+    const cache: FetchCache = new Map();
+    mockFetch
+      .mockResolvedValueOnce(response(200, '<html>first</html>'))
+      .mockResolvedValueOnce(response(200, '<html>again</html>'));
+
+    const raw = await fetchWithoutRedirect('https://example.com/', { cache });
+    await raw.text();
+    const page = await fetchPage('https://example.com/', { cache });
+
+    expect(page.body).toBe('<html>again</html>');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[1][1]).toMatchObject({ redirect: 'follow' });
   });
 
   it('gives up on a body that never finishes', async () => {
@@ -65,6 +81,59 @@ describe('fetchPage', () => {
     mockFetch.mockResolvedValueOnce(stalled);
 
     await expect(fetchPage('https://example.com/', { timeout: 20 })).rejects.toThrow(/Timed out/);
+  });
+
+  it('reads one body for redirect chains that converge on the same page', async () => {
+    const cache: FetchCache = new Map();
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/tgt')) return response(200, '<html>tgt</html>');
+      return response(302, '', { location: '/tgt' });
+    });
+
+    const pages = await Promise.all(
+      Array.from({ length: 20 }, (_, i) => fetchPage(`https://example.com/s${i}`, { cache })),
+    );
+
+    expect(pages.every((p) => p.body === '<html>tgt</html>')).toBe(true);
+    expect(pages.every((p) => p.finalUrl === 'https://example.com/tgt')).toBe(true);
+    expect(requestedUrls().filter((u) => u.endsWith('/tgt'))).toHaveLength(1);
+    expect(mockFetch).toHaveBeenCalledTimes(21);
+  });
+});
+
+describe('fetchPage against a real socket', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('closes the connection when the body times out', async () => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html', 'content-length': 1000 });
+      res.write('<html>');
+      // Never ends.
+    });
+    const closed = new Promise<void>((resolve) => {
+      server.once('connection', (socket) => socket.once('close', () => resolve()));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      await expect(
+        fetchPage(`http://127.0.0.1:${port}/stall`, { timeout: 100 }),
+      ).rejects.toThrow(/Timed out reading body/);
+
+      await Promise.race([
+        closed,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('socket still open 500ms after the timeout')), 500),
+        ),
+      ]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
 
