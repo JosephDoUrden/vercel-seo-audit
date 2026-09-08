@@ -23,7 +23,8 @@ export type IssueCategory =
   | 'i18n'
   | 'images'
   | 'security'
-  | 'performance';
+  | 'performance'
+  | 'vercel';
 
 export type IssueCode =
   // Redirect issues
@@ -111,7 +112,15 @@ export type IssueCode =
   | 'HTML_SIZE_WARNING'
   | 'RENDER_BLOCKING_SCRIPT'
   | 'LARGE_INLINE_STYLE'
-  | 'MISSING_PRECONNECT';
+  | 'MISSING_PRECONNECT'
+  // Vercel platform issues
+  | 'NOT_ON_VERCEL'
+  | 'VERCEL_CACHE_MISS'
+  | 'VERCEL_CACHE_STALE'
+  | 'VERCEL_CACHE_CONTROL_MISSING'
+  | 'VERCEL_S_MAXAGE_SHORT'
+  | 'VERCEL_SWR_MISSING'
+  | 'VERCEL_PREVIEW_INDEXABLE';
 
 export interface AuditFinding {
   code: IssueCode;

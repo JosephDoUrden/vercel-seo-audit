@@ -138,6 +138,14 @@ describe('auditCrawl', () => {
     expect(noindex[0].severity).toBe('warning');
   });
 
+  it('detects noindex via an upper-case meta name="ROBOTS"', async () => {
+    const html = '<html><head><meta name="ROBOTS" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
+    mockFetchPage.mockResolvedValue(makePage(html));
+    const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
+    const findings = await auditCrawl(ctx);
+    expect(findings.some((f) => f.code === 'CRAWL_PAGE_NOINDEX')).toBe(true);
+  });
+
   it('detects noindex via meta name="googlebot"', async () => {
     const html = '<html><head><meta name="googlebot" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));

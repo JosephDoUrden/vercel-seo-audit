@@ -61,6 +61,24 @@ describe('getNoindexDirective', () => {
   it('is case-insensitive', () => {
     expect(getNoindexDirective(html('<meta name="robots" content="NOINDEX">'))).toBe(true);
   });
+
+  it('matches the meta name case-insensitively', () => {
+    expect(getNoindexDirective(html('<meta name="ROBOTS" content="noindex">'))).toBe(true);
+    expect(getNoindexDirective(html('<meta name="GoogleBot" content="noindex">'))).toBe(true);
+  });
+
+  it('treats none as noindex', () => {
+    expect(getNoindexDirective(html('<meta name="robots" content="none">'))).toBe(true);
+    expect(getNoindexDirective(html('<meta name="googlebot" content="NONE, nosnippet">'))).toBe(true);
+  });
+
+  it('does not match none inside another word', () => {
+    expect(getNoindexDirective(html('<meta name="robots" content="nonexistent"><meta name="googlebot" content="all"><meta name="robots" content="index, follow"><meta name="robots" content="noneed">'))).toBe(false);
+  });
+
+  it('ignores other meta names that mention noindex', () => {
+    expect(getNoindexDirective(html('<meta name="description" content="noindex">'))).toBe(false);
+  });
 });
 
 describe('getMetaRefresh', () => {

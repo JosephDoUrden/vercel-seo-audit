@@ -8,10 +8,15 @@ export function getCanonicalUrl(html: string): string | null {
 
 export function getNoindexDirective(html: string): boolean {
   const $ = cheerio.load(html);
-  const robotsMeta = $('meta[name="robots"]').attr('content') ?? '';
-  const googlebotMeta = $('meta[name="googlebot"]').attr('content') ?? '';
-  const combined = `${robotsMeta} ${googlebotMeta}`.toLowerCase();
-  return combined.includes('noindex');
+  // Attribute selectors are case-sensitive; crawlers are not.
+  return $('meta[name]')
+    .toArray()
+    .some((el) => {
+      const name = ($(el).attr('name') ?? '').trim().toLowerCase();
+      if (name !== 'robots' && name !== 'googlebot') return false;
+      // none means noindex, nofollow
+      return /\b(?:noindex|none)\b/i.test($(el).attr('content') ?? '');
+    });
 }
 
 export function getMetaRefresh(html: string): string | null {

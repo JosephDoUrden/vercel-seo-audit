@@ -74,6 +74,22 @@ describe('auditMetadata', () => {
     expect(noindex!.severity).toBe('error');
   });
 
+  it('detects NOINDEX_DETECTED when the meta name is upper-case', async () => {
+    mockFetchPage.mockResolvedValue(
+      makePage('<html><head><meta name="ROBOTS" content="NOINDEX"></head><body></body></html>'),
+    );
+    const findings = await auditMetadata(makeCtx());
+    expect(findings.find((f) => f.code === 'NOINDEX_DETECTED')).toBeDefined();
+  });
+
+  it('detects NOINDEX_DETECTED for a robots meta of none', async () => {
+    mockFetchPage.mockResolvedValue(
+      makePage('<html><head><meta name="robots" content="none"></head><body></body></html>'),
+    );
+    const findings = await auditMetadata(makeCtx());
+    expect(findings.find((f) => f.code === 'NOINDEX_DETECTED')).toBeDefined();
+  });
+
   it('detects X_ROBOTS_NOINDEX header', async () => {
     const headers = new Headers({ 'x-robots-tag': 'noindex' });
     mockFetchPage.mockResolvedValue(makePage(FULL_HTML, { headers }));

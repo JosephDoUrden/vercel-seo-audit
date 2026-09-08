@@ -20,6 +20,7 @@ import {
   auditImages,
   auditSecurity,
   auditPerformance,
+  auditVercel,
 } from './audit/index.js';
 
 type AuditModule = {
@@ -42,6 +43,7 @@ const phase2Modules: AuditModule[] = [
   { name: 'images', run: auditImages },
   { name: 'security', run: auditSecurity },
   { name: 'performance', run: auditPerformance },
+  { name: 'vercel', run: auditVercel },
 ];
 
 async function runModules(
