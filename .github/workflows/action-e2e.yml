@@ -1,4 +1,4 @@
-# Temporary: proves the pull_request comment path on this PR. Removed before merge.
+# Temporary: proves the pull_request comment path on this PR (create, then update). Removed before merge.
 # The action is checked out into a subdirectory so the workspace root holds no
 # package.json: inside its own checkout npm treats the same-named project as
 # already present and runs no bin.
