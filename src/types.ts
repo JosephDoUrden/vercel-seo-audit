@@ -79,6 +79,7 @@ export const ISSUE_CODES = [
   'APP_ROUTER_METADATA',
   'METADATA_STREAMED_TO_BODY',
   'METADATA_NOT_IN_HEAD',
+  'METADATA_IN_HEAD',
   // Structured data issues
   'JSONLD_MISSING',
   'JSONLD_INVALID_JSON',
@@ -190,6 +191,20 @@ export interface AuditReport {
   modules: AuditModuleResult[];
   /** The modules that ran when the audit was limited with `--only`, dependencies included. Absent on a full run. */
   only?: ModuleId[];
+  /**
+   * The audited page as the up-front fetch saw it. Always set by `runAudit`; optional only so
+   * reports saved by older versions still load for `--diff`.
+   */
+  page?: PageFacts;
+}
+
+export interface PageFacts {
+  /** HTTP status of the final response, after redirects; `null` when the request failed. */
+  status: number | null;
+  /** URL of the final response, after redirects; `null` when the request failed. */
+  finalUrl: string | null;
+  /** Whether the response looks like Next.js (x-powered-by header or build markers in the HTML). */
+  nextjs: boolean;
 }
 
 export interface DiffResult {

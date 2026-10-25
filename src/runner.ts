@@ -6,10 +6,12 @@ import type {
   FetchOptions,
   IssueCode,
   ModuleId,
+  PageFacts,
 } from './types.js';
 import { MODULE_IDS } from './types.js';
 import { normalizeUrl } from './utils/url.js';
 import { fetchPage } from './utils/http.js';
+import { isNextjsPage } from './utils/nextjs.js';
 import {
   auditRedirects,
   auditRobots,
@@ -124,8 +126,12 @@ export async function runAudit(
   // Phase 0: fetch the page once and share it. A failed or non-2xx fetch is
   // not shared and is dropped from the cache, so the modules try again for
   // themselves and report what they can.
+  const pageFacts: PageFacts = { status: null, finalUrl: null, nextjs: false };
   try {
     const page = await fetchPage(normalized, fetchOptions);
+    pageFacts.status = page.status;
+    pageFacts.finalUrl = page.finalUrl;
+    pageFacts.nextjs = isNextjsPage(Object.fromEntries(page.headers.entries()), page.body);
     if (page.status >= 200 && page.status < 300) {
       ctx.html = page.body;
       ctx.headers = Object.fromEntries(page.headers.entries());
@@ -181,5 +187,6 @@ export async function runAudit(
     summary,
     modules: allModules,
     ...(only && { only }),
+    page: pageFacts,
   };
 }

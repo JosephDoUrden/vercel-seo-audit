@@ -357,6 +357,63 @@ describe('runAudit', () => {
   });
 });
 
+describe('runAudit report.page', () => {
+  it('records the phase 0 status, final URL and whether the page looks like Next.js', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html><head></head></html>',
+      status: 200,
+      headers: new Headers({ 'x-powered-by': 'Next.js' }),
+      finalUrl: 'https://www.example.com/',
+    });
+    const report = await runAudit('https://example.com');
+    expect(report.page).toEqual({ status: 200, finalUrl: 'https://www.example.com/', nextjs: true });
+  });
+
+  it('reads Next.js build markers in the HTML too', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html><body><div id="__next"></div></body></html>',
+      status: 200,
+      headers: new Headers({ server: 'Vercel' }),
+      finalUrl: 'https://example.com/',
+    });
+    const report = await runAudit('https://example.com');
+    expect(report.page?.nextjs).toBe(true);
+  });
+
+  it('says not Next.js for a page without its header or markers', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html><head><title>x</title></head></html>',
+      status: 200,
+      headers: new Headers({ server: 'nginx' }),
+      finalUrl: 'https://example.com/',
+    });
+    const report = await runAudit('https://example.com');
+    expect(report.page).toEqual({ status: 200, finalUrl: 'https://example.com/', nextjs: false });
+  });
+
+  it('keeps the status of a non-2xx response', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: 'Forbidden',
+      status: 403,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/',
+    });
+    const report = await runAudit('https://example.com');
+    expect(report.page).toEqual({ status: 403, finalUrl: 'https://example.com/', nextjs: false });
+  });
+
+  it('records nulls when the page could not be fetched', async () => {
+    mockFetchPage.mockRejectedValue(new Error('timeout'));
+    const report = await runAudit('https://example.com');
+    expect(report.page).toEqual({ status: null, finalUrl: null, nextjs: false });
+  });
+
+  it('is present on a run limited with only', async () => {
+    const report = await runAudit('https://example.com', { only: ['vercel'] });
+    expect(report.page).toEqual({ status: 200, finalUrl: 'https://example.com/', nextjs: true });
+  });
+});
+
 describe('runAudit with only', () => {
   const allMocks = () => ({
     robots: mockRobots,
