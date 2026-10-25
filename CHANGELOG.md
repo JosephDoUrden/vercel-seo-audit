@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.8.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.7.0...vercel-seo-audit-v2.8.0) (2026-10-25)
+
+
+### Features
+
+* **audit:** detect metadata streamed into the body on Next.js pages ([#162](https://github.com/JosephDoUrden/vercel-seo-audit/issues/162)) ([cadea05](https://github.com/JosephDoUrden/vercel-seo-audit/commit/cadea05ef06c3160f16afc92dfedeb0b4ccbb951))
+
 ## [2.7.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.6.2...vercel-seo-audit-v2.7.0) (2026-10-25)
 
 
