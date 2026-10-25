@@ -17,8 +17,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p action",
+    "lint": "tsc --noEmit && tsc -p action"
   },
   "engines": {
     "node": ">=20.0.0"

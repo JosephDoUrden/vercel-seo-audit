@@ -101,16 +101,44 @@ const severityMdIcons: Record<IssueSeverity, string> = {
   pass: '✅',
 };
 
+// The audited page controls parts of a finding (robots.txt rules, URLs), and
+// report.md can end up as a bot comment on a pull request. Keep such text on
+// one line and out of HTML, so it cannot open a tag, a comment or a new block.
+// & goes first, so an entity such as &#10; stays text and never decodes to a
+// line break; @ and [ are encoded so the text cannot inject Markdown links,
+// images or mentions. Bare URLs still autolink.
+const oneLine = (s: string) => s.replace(/\s*[\r\n]+\s*/g, ' ');
+
+function escapeMd(s: string): string {
+  return oneLine(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/`/g, '&#96;')
+    .replace(/@/g, '&#64;')
+    .replace(/\[/g, '&#91;');
+}
+
+// Entities are not decoded inside a code span, so pick a fence longer than
+// any run of backticks in the text instead (CommonMark code spans).
+function codeSpanMd(s: string): string {
+  const text = oneLine(s);
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  if (longest === 0) return `\`${text}\``;
+  const fence = '`'.repeat(longest + 1);
+  return `${fence} ${text} ${fence}`;
+}
+
 function formatFindingMd(finding: AuditFinding): string {
   const icon = severityMdIcons[finding.severity];
   const lines: string[] = [];
 
-  lines.push(`- ${icon} **[${finding.severity.toUpperCase()}]** ${finding.message}${finding.ignored ? ' _(ignored)_' : ''}`);
-  lines.push(`  - ${finding.explanation}`);
-  lines.push(`  - **Fix:** ${finding.suggestion}`);
+  lines.push(`- ${icon} **[${finding.severity.toUpperCase()}]** ${escapeMd(finding.message)}${finding.ignored ? ' _(ignored)_' : ''}`);
+  lines.push(`  - ${escapeMd(finding.explanation)}`);
+  lines.push(`  - **Fix:** ${escapeMd(finding.suggestion)}`);
 
   if (finding.url) {
-    lines.push(`  - URL: \`${finding.url}\``);
+    lines.push(`  - URL: ${codeSpanMd(finding.url)}`);
   }
 
   return lines.join('\n');
@@ -119,7 +147,7 @@ function formatFindingMd(finding: AuditFinding): string {
 export function formatMarkdown(report: AuditReport): string {
   const lines: string[] = [];
 
-  lines.push(`# SEO Audit Report for ${report.url}`);
+  lines.push(`# SEO Audit Report for ${escapeMd(report.url)}`);
   lines.push('');
   lines.push(`> Completed in ${report.duration}ms at ${report.timestamp}`);
   lines.push('');
