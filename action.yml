@@ -135,7 +135,7 @@ runs:
         fi
 
         set +e
-        npx vercel-seo-audit@2.9.0 "${args[@]}" "${target[@]}" # x-release-please-version
+        npx vercel-seo-audit@2.10.0 "${args[@]}" "${target[@]}" # x-release-please-version
         EXIT_CODE=$?
         set -e
 
