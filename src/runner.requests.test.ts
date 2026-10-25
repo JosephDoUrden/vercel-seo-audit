@@ -207,4 +207,13 @@ describe('request count for a single-URL audit', () => {
     expect(codes).toContain('VERCEL_CACHE_MISS');
     expect(codes).toContain('METADATA_STREAMED_TO_BODY');
   });
+
+  it('makes exactly two GETs for --only streamedMetadata: the page and the bot probe', async () => {
+    const report = await runAudit(`${origin}/streamed`, { timeout: 5000, only: ['streamedMetadata'] });
+    const { total, byPath } = snapshot();
+
+    expect(report.modules.map((m) => m.module)).toEqual(['streamedMetadata']);
+    expect(byPath).toEqual({ 'GET /streamed': 2 });
+    expect(total).toBe(2);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatHtml, formatReport, formatMarkdown, formatDiff } from './output.js';
+import { formatHtml, formatReport, formatMarkdown, formatDiff, formatJson } from './output.js';
 import type { AuditFinding, AuditReport } from '../types.js';
 
 const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -352,5 +352,32 @@ describe('formatMarkdown escaping', () => {
     expect(md).not.toMatch(/\[[^\]]*\]\(https/);
     expect(md).toContain('see &#91;x](https://evil.test)');
     expect(md).toContain('!&#91;p](https://evil.test/p.png)');
+  });
+});
+
+describe('only', () => {
+  const partial = () => makeReport({ only: ['robots', 'sitemap'] });
+
+  it('prints a Modules line in the text report when the run was limited', () => {
+    expect(stripAnsi(formatReport(partial(), false))).toContain('Modules: robots, sitemap');
+  });
+
+  it('prints a Modules line in markdown when the run was limited', () => {
+    expect(formatMarkdown(partial())).toContain('> Modules: robots, sitemap');
+  });
+
+  it('prints a Modules line in html when the run was limited', () => {
+    expect(formatHtml(partial())).toContain('Modules: robots, sitemap');
+  });
+
+  it('prints no Modules line on a full run', () => {
+    expect(stripAnsi(formatReport(makeReport(), false))).not.toContain('Modules:');
+    expect(formatMarkdown(makeReport())).not.toContain('Modules:');
+    expect(formatHtml(makeReport())).not.toContain('Modules:');
+  });
+
+  it('keeps the JSON of a full run free of an only key', () => {
+    expect(formatJson(makeReport())).not.toContain('"only"');
+    expect(JSON.parse(formatJson(partial())).only).toEqual(['robots', 'sitemap']);
   });
 });

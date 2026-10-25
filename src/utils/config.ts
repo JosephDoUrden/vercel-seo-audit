@@ -104,5 +104,15 @@ export function validateConfig(raw: unknown): SeoAuditConfig {
     config.ignore = obj.ignore;
   }
 
+  if ('only' in obj) {
+    if (!Array.isArray(obj.only) || !obj.only.every((m): m is string => typeof m === 'string')) {
+      throw new Error(`Error in ${CONFIG_FILE}: "only" must be an array of strings`);
+    }
+    if (obj.only.length === 0) {
+      throw new Error(`Error in ${CONFIG_FILE}: "only" must list at least one module`);
+    }
+    config.only = obj.only;
+  }
+
   return config;
 }

@@ -122,6 +122,9 @@ vercel-seo-audit https://your-site.com --crawl 100
 
 # Ignore issue codes you have accepted (comma-separated, repeatable)
 vercel-seo-audit https://your-site.com --ignore ROBOTS_MISSING,FAVICON_MISSING
+
+# Run only some audit modules (comma-separated, repeatable)
+vercel-seo-audit https://your-site.com --only vercel,streamedMetadata
 ```
 
 ### Config file
@@ -137,7 +140,8 @@ Create a `.seoauditrc.json` in your project root to set defaults:
   "pages": ["/docs", "/team", "/careers"],
   "report": "json",
   "timeout": 15000,
-  "ignore": ["ROBOTS_MISSING", "FAVICON_MISSING"]
+  "ignore": ["ROBOTS_MISSING", "FAVICON_MISSING"],
+  "only": ["metadata", "vercel"]
 }
 ```
 
@@ -160,6 +164,31 @@ HSTS_MISSING  # set at the CDN, not by the app
 Codes match exactly, case included. An unknown code stops the run with exit code `2` and names the file or flag it came from.
 
 Ignored findings do not count towards the summary or the exit code. The text report hides them unless you pass `--verbose`, where they carry an `(ignored)` tag; JSON, Markdown and HTML reports keep them with `"ignored": true` or the same tag. `--fix` skips them. `--diff` still lists them, tagged, so a code you have just started ignoring does not show up as resolved.
+
+### Running some modules only
+
+`--only` (or the `only` array in `.seoauditrc.json`) runs just the modules you name. The page itself is still fetched once and shared, so `--only streamedMetadata` costs at most two requests: the page, and the same page again as an HTML-limited bot when its metadata is streamed. `--only` on the command line replaces `only` in the config rather than adding to it.
+
+| Module | What it checks |
+|--------|----------------|
+| `robots` | robots.txt |
+| `redirects` | Redirect chains, trailing slash, www and the `--pages` paths |
+| `sitemap` | sitemap.xml and a sample of its URLs; adds `robots` |
+| `metadata` | Title, description, canonical, `noindex`, Open Graph and Twitter Card |
+| `favicon` | Favicon file and `<link>` tags |
+| `nextjs` | Next.js and Vercel detection, trailing slash and middleware headers |
+| `structuredData` | JSON-LD |
+| `i18n` | hreflang |
+| `images` | Image `alt` text, `next/image`, lazy loading and sizes |
+| `security` | Security headers |
+| `performance` | Performance hints |
+| `vercel` | Vercel CDN cache headers and indexable preview URLs |
+| `streamedMetadata` | Metadata streamed into `<body>` by Next.js 15.2+ |
+| `crawl` | Sitemap URLs up to the `--crawl` limit (default 50); adds `robots` and `sitemap` |
+
+A module that reads another one's results brings it along: `--only sitemap` also runs `robots`, so the robots.txt cross-check still happens, and `--only crawl` runs `robots` and `sitemap` first. `--only` without `crawl` turns crawling off even if `--crawl` is set (a warning says so); naming `crawl` turns it on, with the `--crawl` limit or the default of 50. Ids match exactly, case included, and an unknown one stops the run with exit code `2`.
+
+A limited run says so: the text, Markdown and HTML reports print a `Modules:` line, and the JSON report gains an `only` array listing the modules that ran. With `--diff`, the previous report is compared on the same modules, so findings from modules you did not run are not shown as resolved.
 
 ---
 

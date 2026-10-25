@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runAudit } from './runner.js';
+import { runAudit, phases } from './runner.js';
+import { MODULE_IDS } from './types.js';
 
 vi.mock('./utils/http.js', () => ({
   fetchPage: vi.fn(),
@@ -353,5 +354,148 @@ describe('runAudit', () => {
     expect(ctx.html).toBeUndefined();
     expect(ctx.headers).toBeUndefined();
     expect(ctx.finalUrl).toBeUndefined();
+  });
+});
+
+describe('runAudit with only', () => {
+  const allMocks = () => ({
+    robots: mockRobots,
+    redirects: mockRedirects,
+    sitemap: mockSitemap,
+    metadata: mockMetadata,
+    favicon: mockFavicon,
+    nextjs: mockNextjs,
+    structuredData: mockStructuredData,
+    i18n: mockI18n,
+    images: mockImages,
+    security: mockSecurity,
+    performance: mockPerformance,
+    vercel: mockVercel,
+    streamedMetadata: mockStreamedMetadata,
+    crawl: mockCrawl,
+  });
+
+  function called(): string[] {
+    return Object.entries(allMocks())
+      .filter(([, mock]) => mock.mock.calls.length > 0)
+      .map(([name]) => name);
+  }
+
+  it('runs every module id, in MODULE_IDS order, on a full run with crawl', async () => {
+    const report = await runAudit('https://example.com', { crawl: 10 });
+
+    expect(report.modules.map((m) => m.module)).toEqual([...MODULE_IDS]);
+    expect(Object.keys(allMocks()).sort()).toEqual([...MODULE_IDS].sort());
+  });
+
+  it('treats an empty only as a full run', async () => {
+    const report = await runAudit('https://example.com', { only: [] });
+
+    expect(mockMetadata).toHaveBeenCalledTimes(1);
+    expect('only' in report).toBe(false);
+  });
+
+  it('runs only the selected modules', async () => {
+    const report = await runAudit('https://example.com', { only: ['metadata', 'vercel'] });
+
+    expect(called()).toEqual(['metadata', 'vercel']);
+    expect(report.modules.map((m) => m.module)).toEqual(['metadata', 'vercel']);
+    expect(report.only).toEqual(['metadata', 'vercel']);
+    expect(mockFetchPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds robots when sitemap is selected, so the robots.txt cross-check still runs', async () => {
+    mockRobots.mockImplementation(async (ctx) => {
+      ctx.robotsTxt = 'Sitemap: https://example.com/other.xml';
+      return [];
+    });
+
+    const report = await runAudit('https://example.com', { only: ['sitemap'] });
+
+    expect(called()).toEqual(['robots', 'sitemap']);
+    expect(mockSitemap.mock.calls[0][0].robotsTxt).toBe('Sitemap: https://example.com/other.xml');
+    expect(report.only).toEqual(['robots', 'sitemap']);
+  });
+
+  it('adds robots and sitemap when crawl is selected, and runs crawl last', async () => {
+    const order: string[] = [];
+    mockRobots.mockImplementation(async () => { order.push('robots'); return []; });
+    mockSitemap.mockImplementation(async (ctx) => {
+      order.push('sitemap');
+      ctx.sitemapUrls = ['https://example.com/a'];
+      return [];
+    });
+    mockCrawl.mockImplementation(async (ctx) => {
+      order.push('crawl');
+      expect(ctx.sitemapUrls).toEqual(['https://example.com/a']);
+      return [];
+    });
+
+    const report = await runAudit('https://example.com', { only: ['crawl'], crawl: 5 });
+
+    expect(order).toEqual(['robots', 'sitemap', 'crawl']);
+    expect(report.only).toEqual(['robots', 'sitemap', 'crawl']);
+    expect(report.modules.map((m) => m.module)).toEqual(['robots', 'sitemap', 'crawl']);
+  });
+
+  it('runs crawl when it is selected even without the crawl option', async () => {
+    await runAudit('https://example.com', { only: ['crawl'] });
+
+    expect(mockCrawl).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run crawl when the crawl option is set but crawl is not selected', async () => {
+    await runAudit('https://example.com', { only: ['metadata'], crawl: 10 });
+
+    expect(mockCrawl).not.toHaveBeenCalled();
+  });
+
+  it('warns once on stderr when the crawl option is set but crawl is not selected', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const report = await runAudit('https://example.com', { only: ['metadata'], crawl: 10 });
+      expect(stderr.mock.calls).toEqual([['--crawl has no effect: "crawl" is not in --only\n']]);
+      expect(report.only).toEqual(['metadata']);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it('does not warn when crawl is selected or only is unset', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await runAudit('https://example.com', { only: ['crawl'], crawl: 10 });
+      await runAudit('https://example.com', { crawl: 10 });
+      await runAudit('https://example.com', { only: ['metadata'] });
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it('puts every dependency in an earlier phase than the module that needs it', () => {
+    const phaseOf = new Map(phases.flatMap((phase, i) => phase.map((m) => [m.name, i] as const)));
+    for (const mod of phases.flat()) {
+      for (const dep of mod.deps ?? []) expect(phaseOf.get(dep)).toBeLessThan(phaseOf.get(mod.name)!);
+    }
+  });
+
+  it('counts only the selected modules in the summary', async () => {
+    mockMetadata.mockResolvedValue([
+      { code: 'TITLE_MISSING', severity: 'error', category: 'metadata', message: '', explanation: '', suggestion: '' },
+    ]);
+    mockFavicon.mockResolvedValue([
+      { code: 'FAVICON_MISSING', severity: 'warning', category: 'favicon', message: '', explanation: '', suggestion: '' },
+    ]);
+
+    const report = await runAudit('https://example.com', { only: ['metadata'] });
+
+    expect(report.summary).toEqual({ errors: 1, warnings: 0, info: 0, passed: 0 });
+  });
+
+  it('leaves only off the report when nothing is selected', async () => {
+    const report = await runAudit('https://example.com');
+
+    expect('only' in report).toBe(false);
   });
 });

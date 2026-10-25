@@ -134,6 +134,19 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ ignore: ['ROBOTS_MISSING', 1] })).toThrow('"ignore" must be an array of strings');
   });
 
+  it('accepts only as an array of strings', () => {
+    expect(validateConfig({ only: ['sitemap', 'vercel'] }).only).toEqual(['sitemap', 'vercel']);
+  });
+
+  it('throws when only is not an array of strings', () => {
+    expect(() => validateConfig({ only: 'sitemap' })).toThrow('Error in .seoauditrc.json: "only" must be an array of strings');
+    expect(() => validateConfig({ only: ['sitemap', 1] })).toThrow('"only" must be an array of strings');
+  });
+
+  it('throws when only is empty', () => {
+    expect(() => validateConfig({ only: [] })).toThrow('Error in .seoauditrc.json: "only" must list at least one module');
+  });
+
   it('accepts url without protocol', () => {
     const config = validateConfig({ url: 'example.com' });
     expect(config.url).toBe('example.com');
