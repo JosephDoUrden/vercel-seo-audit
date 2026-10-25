@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.1](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.6.0...vercel-seo-audit-v2.6.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **audit:** re-request on a CDN miss before reporting an uncached page ([#156](https://github.com/JosephDoUrden/vercel-seo-audit/issues/156)) ([b3c27af](https://github.com/JosephDoUrden/vercel-seo-audit/commit/b3c27af206c7142796daa65eada7ce394a6d773b))
+
 ## [2.6.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.5.3...vercel-seo-audit-v2.6.0) (2026-09-08)
 
 
