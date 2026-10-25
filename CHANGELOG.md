@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.7.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.6.2...vercel-seo-audit-v2.7.0) (2026-10-25)
+
+
+### Features
+
+* **cli:** add --ignore, .seoauditignore and config ignore ([#160](https://github.com/JosephDoUrden/vercel-seo-audit/issues/160)) ([317cf98](https://github.com/JosephDoUrden/vercel-seo-audit/commit/317cf98eaa674364a6c6e6f49a4b667aa9a5a41f)), closes [#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41)
+
 ## [2.6.2](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.6.1...vercel-seo-audit-v2.6.2) (2026-10-25)
 
 
