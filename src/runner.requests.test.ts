@@ -37,6 +37,29 @@ function page(withMarkers: boolean): string {
 </html>`;
 }
 
+// Next.js 15.2+ streams generateMetadata output into <body> for user agents that are not
+// on its HTML-limited bot list, and keeps it in <head> for those that are.
+function streamed(htmlLimitedBot: boolean): string {
+  const tags = `<title>Streamed</title>
+  <meta name="description" content="Streamed metadata harness">
+  <link rel="canonical" href="${origin}/streamed">`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  ${htmlLimitedBot ? tags : ''}
+</head>
+<body>
+  <div id="__next"><p>Content</p></div>
+  ${htmlLimitedBot ? '' : tags}
+</body>
+</html>`;
+}
+
+function byPathNow(): Record<string, number> {
+  return snapshot().byPath;
+}
+
 function snapshot(): { total: number; byPath: Record<string, number> } {
   const total = [...counts.values()].reduce((a, b) => a + b, 0);
   const byPath = Object.fromEntries([...counts.entries()].sort());
@@ -49,11 +72,14 @@ beforeAll(async () => {
     const key = `${req.method} ${path}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
 
-    const send = (status: number, type: string, body: string) => {
+    const htmlLimitedBot = /facebookexternalhit/i.test(req.headers['user-agent'] ?? '');
+
+    const send = (status: number, type: string, body: string, extra: Record<string, string> = {}) => {
       res.writeHead(status, {
         'content-type': type,
         'content-length': Buffer.byteLength(body),
         'x-powered-by': 'Next.js',
+        ...extra,
       });
       res.end(req.method === 'HEAD' ? undefined : body);
     };
@@ -69,6 +95,16 @@ beforeAll(async () => {
           return send(500, 'text/plain', 'boom');
         }
         return send(200, 'text/html; charset=utf-8', page(true));
+      case '/streamed':
+        return send(200, 'text/html; charset=utf-8', streamed(htmlLimitedBot));
+      case '/streamed-vercel':
+        // A dynamic route on Vercel: never cached, so the Vercel module asks twice too.
+        return send(200, 'text/html; charset=utf-8', streamed(htmlLimitedBot), {
+          server: 'Vercel',
+          'x-vercel-id': 'lhr1::abc',
+          'x-vercel-cache': 'MISS',
+          'cache-control': 'public, max-age=0, must-revalidate',
+        });
       case '/robots.txt':
         return send(200, 'text/plain', `User-agent: *\nAllow: /\nSitemap: ${origin}/sitemap.xml\n`);
       case '/sitemap.xml':
@@ -151,5 +187,24 @@ describe('request count for a single-URL audit', () => {
     const nextjs = report.modules.find((m) => m.module === 'nextjs');
 
     expect(nextjs?.findings.find((f) => f.code === 'APP_ROUTER_METADATA')).toBeUndefined();
+  });
+
+  it('asks for a streamed-metadata page once more, as an HTML-limited bot', async () => {
+    const report = await runAudit(`${origin}/streamed`, { timeout: 5000 });
+    const finding = report.modules
+      .find((m) => m.module === 'streamedMetadata')
+      ?.findings.find((f) => f.code === 'METADATA_STREAMED_TO_BODY');
+
+    expect(byPathNow()['GET /streamed']).toBe(2);
+    expect(finding).toMatchObject({ severity: 'info', details: { botRequest: 'ok' } });
+  });
+
+  it('makes at most two extra GETs for the page: the Vercel recheck and the bot probe', async () => {
+    const report = await runAudit(`${origin}/streamed-vercel`, { timeout: 5000 });
+    const codes = report.modules.flatMap((m) => m.findings.map((f) => f.code));
+
+    expect(byPathNow()['GET /streamed-vercel']).toBe(3);
+    expect(codes).toContain('VERCEL_CACHE_MISS');
+    expect(codes).toContain('METADATA_STREAMED_TO_BODY');
   });
 });

@@ -11,6 +11,7 @@ import {
   getHreflangLinks,
   getImages,
   getHeadScripts,
+  locateMetadata,
 } from './html-parser.js';
 
 function html(head: string): string {
@@ -373,5 +374,79 @@ describe('getHeadScripts', () => {
   it('keeps a > inside a quoted attribute value', () => {
     const scripts = getHeadScripts(html('<script data-cfg="a>b" src="/a.js"></script>'));
     expect(scripts).toEqual([{ src: '/a.js', type: null, async: false, defer: false }]);
+  });
+});
+
+describe('locateMetadata', () => {
+  const ALL = `<title>T</title>
+    <meta name="description" content="D">
+    <link rel="canonical" href="https://example.com/">
+    <meta property="og:title" content="T">
+    <meta property="og:description" content="D">
+    <meta property="og:image" content="https://example.com/og.png">`;
+
+  it('puts tags in <head> under head', () => {
+    const { head, bodyOnly } = locateMetadata(html(ALL));
+    expect([...head].sort()).toEqual(
+      ['canonical', 'description', 'og:description', 'og:image', 'og:title', 'title'],
+    );
+    expect(bodyOnly.size).toBe(0);
+  });
+
+  it('reports tags found only under <body> as body-only', () => {
+    const { head, bodyOnly } = locateMetadata(body(ALL));
+    expect(head.size).toBe(0);
+    expect([...bodyOnly].sort()).toEqual(
+      ['canonical', 'description', 'og:description', 'og:image', 'og:title', 'title'],
+    );
+  });
+
+  it('does not call a tag body-only when it is also in <head>', () => {
+    const { head, bodyOnly } = locateMetadata(
+      '<html><head><title>T</title></head><body><title>T</title><meta name="description" content="D"></body></html>',
+    );
+    expect([...head]).toEqual(['title']);
+    expect([...bodyOnly]).toEqual(['description']);
+  });
+
+  it('leaves missing tags out of both sets', () => {
+    const { head, bodyOnly } = locateMetadata(html('<meta charset="utf-8">'));
+    expect(head.size).toBe(0);
+    expect(bodyOnly.size).toBe(0);
+  });
+
+  it('reads og tags set with name= as well as property=', () => {
+    const { bodyOnly } = locateMetadata(body('<meta name="og:image" content="/og.png">'));
+    expect([...bodyOnly]).toEqual(['og:image']);
+  });
+
+  it('does not count an inline SVG title as the page title', () => {
+    const { head, bodyOnly } = locateMetadata(
+      body('<svg viewBox="0 0 1 1"><title>Close</title><path d="M0 0"/></svg>'),
+    );
+    expect(head.size).toBe(0);
+    expect(bodyOnly.size).toBe(0);
+  });
+
+  it('does not count metadata inside a <template> as page metadata', () => {
+    const { head, bodyOnly } = locateMetadata(
+      body('<template><title>T</title><meta name="description" content="D"></template>'),
+    );
+    expect(head.size).toBe(0);
+    expect(bodyOnly.size).toBe(0);
+  });
+
+  it('treats tags before any content as head when the document has no <head>', () => {
+    const { head, bodyOnly } = locateMetadata(
+      '<title>T</title><meta name="description" content="D"><p>Hello</p>',
+    );
+    expect([...head].sort()).toEqual(['description', 'title']);
+    expect(bodyOnly.size).toBe(0);
+  });
+
+  it('returns empty sets for an empty document', () => {
+    const { head, bodyOnly } = locateMetadata('');
+    expect(head.size).toBe(0);
+    expect(bodyOnly.size).toBe(0);
   });
 });

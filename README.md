@@ -260,6 +260,19 @@ Progress is printed to stderr as each page is crawled.
 * Detect Vercel deployment
 * Detect Next.js trailing slash redirect behaviour
 * Middleware rewrite/redirect headers (best-effort)
+* Metadata streamed into `<body>` (`METADATA_STREAMED_TO_BODY`, info). Next.js 15.2+ streams
+  `generateMetadata` output into `<body>` for every user agent not on its HTML-limited bot list
+  when `generateMetadata` is dynamic (static metadata and prerendered pages stay in `<head>`),
+  so crawlers that read only `<head>` and do not run JavaScript miss the title, description,
+  canonical and Open Graph tags. When any of those is in `<body>` alone on a Next.js page, the
+  page is fetched once more as `facebookexternalhit`, without the shared cache, to compare.
+  Together with the Vercel recheck below, that is at most two extra GETs of the page per audit.
+  Skipped when `--user-agent` is already on Next's list (the `bingbot` preset is; `googlebot`
+  is not, because Next.js streams to it too), and not run on `--crawl` pages
+* Metadata missing from `<head>` even for that bot (`METADATA_NOT_IN_HEAD`, warning): a narrower
+  `htmlLimitedBots`, a proxy rewriting the user agent, or tags rendered by client code. A bot
+  copy served from the CDN cache (`HIT` / `STALE`) still warns, since that is what the crawler
+  gets until the entry expires, with a note to re-run after it does
 
 ### Vercel platform
 

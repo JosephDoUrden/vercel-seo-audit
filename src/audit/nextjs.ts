@@ -1,5 +1,6 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchPage, fetchWithoutRedirect } from '../utils/http.js';
+import { hasNextjsMarkers, poweredByNextjs } from '../utils/nextjs.js';
 import { addTrailingSlash, removeTrailingSlash, hasTrailingSlash } from '../utils/url.js';
 
 export async function auditNextjs(ctx: AuditContext): Promise<AuditFinding[]> {
@@ -24,7 +25,7 @@ export async function auditNextjs(ctx: AuditContext): Promise<AuditFinding[]> {
   const xVercelId = headers['x-vercel-id'] ?? '';
   const xPoweredBy = headers['x-powered-by'] ?? '';
   const isVercel = server.toLowerCase().includes('vercel') || !!xVercelId;
-  const isNextjs = xPoweredBy.toLowerCase().includes('next.js');
+  const isNextjs = poweredByNextjs(headers);
 
   if (isVercel) {
     findings.push({
@@ -96,12 +97,7 @@ export async function auditNextjs(ctx: AuditContext): Promise<AuditFinding[]> {
   // 5. App Router metadata check (presence of Next.js metadata headers)
   const html = ctx.html;
   if (html) {
-    const hasNextMetadata =
-      html.includes('next-head-count') ||
-      html.includes('__next') ||
-      html.includes('_next/static');
-
-    if (isNextjs && !hasNextMetadata) {
+    if (isNextjs && !hasNextjsMarkers(html)) {
       findings.push({
         code: 'APP_ROUTER_METADATA',
         severity: 'info',
