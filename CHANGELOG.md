@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.9.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.8.0...vercel-seo-audit-v2.9.0) (2026-10-25)
+
+
+### Features
+
+* **action:** post a job summary and an updatable PR comment ([#164](https://github.com/JosephDoUrden/vercel-seo-audit/issues/164)) ([48fefaa](https://github.com/JosephDoUrden/vercel-seo-audit/commit/48fefaa177f606bd05ee40009d95f279f7015964))
+
 ## [2.8.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.7.0...vercel-seo-audit-v2.8.0) (2026-10-25)
 
 
