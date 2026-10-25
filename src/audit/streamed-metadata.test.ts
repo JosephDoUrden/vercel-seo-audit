@@ -61,6 +61,13 @@ describe('auditStreamedMetadata', () => {
     expect(mockFetchPage).not.toHaveBeenCalled();
   });
 
+  it('does not pass a page that does not look like Next.js, even with the metadata in <head>', async () => {
+    const findings = await auditStreamedMetadata(
+      makeCtx({ headers: { server: 'nginx' }, html: `<html><head>${TAGS}</head><body></body></html>` }),
+    );
+    expect(findings).toEqual([]);
+  });
+
   it('treats Next.js build markers in the HTML as Next.js without x-powered-by', async () => {
     const findings = await auditStreamedMetadata(makeCtx({ headers: { server: 'Vercel' } }));
     expect(findings).toHaveLength(1);
@@ -72,17 +79,63 @@ describe('auditStreamedMetadata', () => {
     expect(mockFetchPage).not.toHaveBeenCalled();
   });
 
-  it('does nothing when the metadata is already in <head>', async () => {
-    const findings = await auditStreamedMetadata(makeCtx({ html: HEAD_HTML }));
-    expect(findings).toEqual([]);
+  it('reports METADATA_IN_HEAD as a pass, without a second request, when the metadata is already in <head>', async () => {
+    const findings = await auditStreamedMetadata(makeCtx({ html: HEAD_HTML, headers: { 'x-vercel-cache': 'HIT' } }));
     expect(mockFetchPage).not.toHaveBeenCalled();
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      code: 'METADATA_IN_HEAD',
+      severity: 'pass',
+      category: 'nextjs',
+      url: URL_,
+      message: 'Page metadata is in <head> for the default user agent',
+    });
+    expect(findings[0].details).toEqual({
+      headTags: ['title', 'description', 'canonical', 'og:title'],
+      defaultCache: 'HIT',
+      nextjs: true,
+    });
+  });
+
+  it('does not pass a Next.js page with none of the tags', async () => {
+    const html = '<html><head></head><body><div id="__next"></div></body></html>';
+    const findings = await auditStreamedMetadata(makeCtx({ html }));
+    expect(mockFetchPage).not.toHaveBeenCalled();
+    expect(findings).toEqual([]);
   });
 
   it('does not count an inline SVG title in body as streamed metadata', async () => {
     const html = `<html><head>${TAGS}</head><body><div id="__next"><svg><title>Close</title></svg></div></body></html>`;
     const findings = await auditStreamedMetadata(makeCtx({ html }));
-    expect(findings).toEqual([]);
+    expect(findings.map((f) => f.code)).toEqual(['METADATA_IN_HEAD']);
     expect(mockFetchPage).not.toHaveBeenCalled();
+  });
+
+  it('does not pass a page with some tags in <head> and others in <body> alone, and probes once', async () => {
+    const html = '<html><head><title>x</title></head><body><div id="__next"></div><meta name="description" content="d"></body></html>';
+    const findings = await auditStreamedMetadata(makeCtx({ html }));
+    expect(mockFetchPage).toHaveBeenCalledTimes(1);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      code: 'METADATA_STREAMED_TO_BODY',
+      severity: 'info',
+      details: { bodyOnly: ['description'], botHead: ['description'], missing: [] },
+    });
+  });
+
+  it('does not pass when some metadata is in <body> alone', async () => {
+    const results = [
+      await auditStreamedMetadata(makeCtx()),
+      await auditStreamedMetadata(makeCtx({ html: STREAMED_HTML })),
+    ];
+    botAnswers(STREAMED_HTML);
+    results.push(await auditStreamedMetadata(makeCtx()));
+    mockFetchPage.mockRejectedValue(new Error('timeout'));
+    results.push(await auditStreamedMetadata(makeCtx()));
+    for (const findings of results) {
+      expect(findings).toHaveLength(1);
+      expect(findings[0].code).not.toBe('METADATA_IN_HEAD');
+    }
   });
 
   it('fetches the page once more as an HTML-limited bot, uncached', async () => {

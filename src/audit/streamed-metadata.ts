@@ -66,10 +66,28 @@ export async function auditStreamedMetadata(ctx: AuditContext): Promise<AuditFin
   const defaultUserAgent = ctx.fetchOptions.userAgent ?? USER_AGENT;
   if (HTML_LIMITED_BOT_UA_RE.test(defaultUserAgent)) return [];
 
-  const bodyOnly = [...locateMetadata(html).bodyOnly];
-  if (bodyOnly.length === 0) return [];
-
   const url = ctx.finalUrl ?? ctx.normalizedUrl;
+  const located = locateMetadata(html);
+  const bodyOnly = [...located.bodyOnly];
+  if (bodyOnly.length === 0) {
+    // A pass, so a JSON run can tell "all in <head>" apart from "not Next.js" (no finding).
+    // With none of the tags at all there is nothing in <head>; the metadata checks report that.
+    const headTags = [...located.head];
+    if (headTags.length === 0) return [];
+    return [
+      {
+        code: 'METADATA_IN_HEAD',
+        severity: 'pass',
+        category: 'nextjs',
+        message: 'Page metadata is in <head> for the default user agent',
+        explanation: `With the audit's user agent, ${list(headTags)} ${headTags.length === 1 ? 'was' : 'were'} in <head>, and none of the tags this check reads was in <body> alone, so nothing was streamed and no second request was made.`,
+        suggestion: 'No action needed.',
+        details: { headTags, defaultCache: headers['x-vercel-cache'], nextjs: true },
+        url,
+      },
+    ];
+  }
+
   const bot = await probe(url, ctx);
   const tags = list(bodyOnly);
   const base = {

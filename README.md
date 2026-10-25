@@ -127,6 +127,13 @@ vercel-seo-audit https://your-site.com --ignore ROBOTS_MISSING,FAVICON_MISSING
 vercel-seo-audit https://your-site.com --only vercel,streamedMetadata
 ```
 
+Every JSON report carries a `page` object describing the up-front fetch of the audited URL:
+`{ "status": 200, "finalUrl": "https://your-site.com/", "nextjs": true }`. `status` and
+`finalUrl` are those of the last response after redirects, and both are `null` when the request
+failed; `nextjs` is `true` when that response has the `x-powered-by: Next.js` header or Next.js
+build markers in its HTML. A non-2xx response keeps its status, so an unreachable or blocked page
+reads differently from one that is simply not Next.js.
+
 ### Config file
 
 Create a `.seoauditrc.json` in your project root to set defaults:
@@ -302,6 +309,9 @@ Progress is printed to stderr as each page is crawled.
   `htmlLimitedBots`, a proxy rewriting the user agent, or tags rendered by client code. A bot
   copy served from the CDN cache (`HIT` / `STALE`) still warns, since that is what the crawler
   gets until the entry expires, with a note to re-run after it does
+* Metadata already in `<head>` (`METADATA_IN_HEAD`, pass) on a Next.js page where at least one of those tags is in `<head>` and none
+  is in `<body>` alone, with the tags found in `details.headTags`; no second request is made.
+  Like other pass findings it counts under "passed" and never changes the exit code
 
 ### Vercel platform
 
