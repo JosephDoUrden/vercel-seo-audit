@@ -1,5 +1,6 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { getNoindexDirective } from '../utils/html-parser.js';
+import { fetchPage } from '../utils/http.js';
 
 // Vercel's own examples pair a one-second s-maxage with stale-while-revalidate. Below a
 // minute without it, every expiry makes a visitor wait on the origin.
@@ -64,9 +65,41 @@ function optsOut(directives: Directives | undefined): boolean {
   return !!directives && ['private', 'no-store', 'no-cache'].some((d) => directives.has(d));
 }
 
+// CDN-Cache-Control overrides Cache-Control for the CDN, so a browser-only no-store beside
+// a CDN lifetime is still storable.
+function isPersonalised(headers: Record<string, string>): boolean {
+  const directives = parseDirectives(headers['cdn-cache-control']) ?? parseDirectives(headers['cache-control']);
+  return 'set-cookie' in headers || optsOut(directives) || (headers['vary'] ?? '').trim() === '*';
+}
+
+// The statuses a re-request can settle on. Anything else, including no header at all,
+// tells us nothing and counts as a failed second request.
+const CACHE_STATUSES = new Set(['MISS', 'HIT', 'STALE', 'PRERENDER', 'REVALIDATED', 'BYPASS']);
+
+interface Recheck {
+  status: string;
+  headers: Record<string, string>;
+}
+
+// One more GET for the same URL. The options leave out the shared cache on purpose: with it,
+// fetchPage would hand back the phase 0 response instead of asking the CDN again.
+async function recheck(url: string, ctx: AuditContext): Promise<Recheck | undefined> {
+  try {
+    const { timeout, userAgent } = ctx.fetchOptions;
+    const page = await fetchPage(url, { timeout, userAgent });
+    if (page.status < 200 || page.status >= 300 || page.finalUrl !== url) return undefined;
+    const headers = Object.fromEntries(page.headers.entries());
+    const status = (headers['x-vercel-cache'] ?? '').toUpperCase();
+    return CACHE_STATUSES.has(status) ? { status, headers } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Header-driven checks that only make sense on Vercel's CDN. Everything comes from the
- * phase 0 response; nothing here makes a request of its own.
+ * Header-driven checks that only make sense on Vercel's CDN. Everything starts from the
+ * phase 0 response. The one request of its own is a second GET when that response was a
+ * MISS on a page the CDN could store, to tell a cold miss from a page that is never cached.
  */
 export async function auditVercel(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
@@ -121,21 +154,33 @@ export async function auditVercel(ctx: AuditContext): Promise<AuditFinding[]> {
   }
 
   // 2. CDN cache state. Only worth reading when the response is one the CDN may store.
-  const cacheControl = headers['cache-control'];
-  const cdnCacheControl = headers['cdn-cache-control'];
+  if (isPersonalised(headers)) return findings;
+
+  // A MISS straight after a deploy says nothing about the page, so ask once more. When the
+  // CDN has it the second time, the rest of the checks read that response instead.
+  let status = (headers['x-vercel-cache'] ?? '').toUpperCase();
+  let current = headers;
+  let requests: { firstRequest: string; secondRequest: string } | undefined;
+  if (status === 'MISS') {
+    const second = await recheck(url, ctx);
+    if (second && isPersonalised(second.headers)) return findings;
+    requests = { firstRequest: 'MISS', secondRequest: second?.status ?? 'failed' };
+    if (second && second.status !== 'MISS') {
+      status = second.status;
+      current = second.headers;
+    }
+  }
+  const confirmedMiss = requests?.secondRequest === 'MISS';
+
+  const cacheControl = current['cache-control'];
+  const cdnCacheControl = current['cdn-cache-control'];
   const cc = parseDirectives(cacheControl);
   const cdn = parseDirectives(cdnCacheControl);
-  // CDN-Cache-Control overrides Cache-Control for the CDN, so a browser-only no-store beside
-  // a CDN lifetime is still storable.
-  const personalised =
-    'set-cookie' in headers || optsOut(cdn ?? cc) || (headers['vary'] ?? '').trim() === '*';
-  if (personalised) return findings;
-
-  const status = (headers['x-vercel-cache'] ?? '').toUpperCase();
   const cacheDetails = {
     xVercelCache: status || undefined,
     cacheControl,
     cdnCacheControl,
+    ...requests,
   };
 
   if (status === 'MISS') {
@@ -143,11 +188,28 @@ export async function auditVercel(ctx: AuditContext): Promise<AuditFinding[]> {
       code: 'VERCEL_CACHE_MISS',
       severity: 'info',
       category: 'vercel',
-      message: 'Page was not served from the Vercel CDN cache (x-vercel-cache: MISS)',
+      message: confirmedMiss
+        ? 'Page was not served from the Vercel CDN cache on two requests (x-vercel-cache: MISS)'
+        : 'Page was not served from the Vercel CDN cache (x-vercel-cache: MISS)',
+      explanation: confirmedMiss
+        ? 'The audit asked for the page twice and the CDN generated it from your function both times, so this is not a cold miss after a deploy. That is expected on a dynamic route, which Vercel renders on every request, but a page that is the same for every visitor is not being cached.'
+        : 'The CDN had nothing to serve and generated the response from your function. Vercel strips s-maxage before the client sees it, so a cold miss after a deploy and a page with no CDN lifetime look the same from outside.',
+      suggestion: confirmedMiss
+        ? 'If the page is the same for every visitor, set s-maxage (Vercel suggests max-age=0, s-maxage=86400) or use ISR. On a dynamic route, no action needed.'
+        : 'Run the audit again. A second MISS on a page that is the same for every visitor means it is not being cached; set s-maxage (Vercel suggests max-age=0, s-maxage=86400) or use ISR.',
+      details: cacheDetails,
+      url,
+    });
+  } else if (status === 'BYPASS') {
+    findings.push({
+      code: 'VERCEL_CACHE_BYPASS',
+      severity: 'info',
+      category: 'vercel',
+      message: 'Vercel skipped the CDN cache for this request (x-vercel-cache: BYPASS)',
       explanation:
-        'The CDN had nothing to serve and generated the response from your function. Vercel strips s-maxage before the client sees it, so a cold miss after a deploy and a page with no CDN lifetime look the same from outside.',
+        'Vercel skipped the cache on purpose and served fresh content from your function. It does that for Draft Mode, for requests matching a prerender bypass rule (Next.js uses one to serve some crawlers fully rendered pages), and for known crawlers on a page that would otherwise get its prerender fallback. Other visitors may still get the cached copy.',
       suggestion:
-        'Run the audit again. A second MISS on a page that is the same for every visitor means it is not being cached; set s-maxage (Vercel suggests max-age=0, s-maxage=86400) or use ISR.',
+        'No action needed if you audited with a crawler user agent. Otherwise the runtime logs show the bypass reason for this path.',
       details: cacheDetails,
       url,
     });
@@ -175,15 +237,19 @@ export async function auditVercel(ctx: AuditContext): Promise<AuditFinding[]> {
 
   if (status === 'MISS' && ttl === undefined) {
     const present = [cdn && 'cdn-cache-control', cc && 'cache-control'].filter(Boolean).join(' or ');
+    const missed = confirmedMiss ? 'missed the CDN cache twice' : 'missed the CDN cache';
     findings.push({
       code: 'VERCEL_CACHE_CONTROL_MISSING',
-      severity: 'warning',
+      // Two misses in a row are also what a dynamic route looks like, and a failed second
+      // request proves even less, so neither is worth a warning.
+      severity: 'info',
       category: 'vercel',
       message: present
-        ? `No CDN lifetime in ${present} on a page that missed the CDN cache`
-        : 'No cache-control header on a page that missed the CDN cache',
-      explanation:
-        'Without s-maxage (or max-age in cdn-cache-control) the CDN generates this page on every request. Vercel treats the default public, max-age=0, must-revalidate as no caching. Vercel also strips s-maxage before the client sees it, so a cold miss straight after a deploy looks the same; a second run settles it.',
+        ? `No CDN lifetime in ${present} on a page that ${missed}`
+        : `No cache-control header on a page that ${missed}`,
+      explanation: confirmedMiss
+        ? 'Without s-maxage (or max-age in cdn-cache-control) the CDN generates this page on every request. Vercel treats the default public, max-age=0, must-revalidate as no caching. Both requests the audit made missed the cache, so this is not a cold miss after a deploy, though a dynamic route misses every time too.'
+        : 'Without s-maxage (or max-age in cdn-cache-control) the CDN generates this page on every request. Vercel treats the default public, max-age=0, must-revalidate as no caching. Vercel also strips s-maxage before the client sees it, so a cold miss straight after a deploy looks the same; a second run settles it.',
       suggestion:
         'For pages that are the same for every visitor, send Cache-Control: max-age=0, s-maxage=86400 with a stale-while-revalidate window, or use ISR.',
       details: cacheDetails,

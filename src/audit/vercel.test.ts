@@ -1,6 +1,30 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuditContext } from '../types.js';
 import { auditVercel } from './vercel.js';
+
+vi.mock('../utils/http.js', () => ({
+  fetchPage: vi.fn(),
+}));
+
+import { fetchPage } from '../utils/http.js';
+const mockFetchPage = vi.mocked(fetchPage);
+
+type Page = Awaited<ReturnType<typeof fetchPage>>;
+
+function page(headers: Record<string, string>, overrides: Partial<Page> = {}): Page {
+  return { body: '', status: 200, headers: new Headers(headers), finalUrl: 'https://example.com/', ...overrides };
+}
+
+// The re-request on a MISS answers MISS again unless a test says otherwise, so the cases
+// below that start from a MISS describe a page that really is not being cached.
+function secondRequest(headers: Record<string, string>, overrides: Partial<Page> = {}) {
+  mockFetchPage.mockImplementation(async (url) => page(headers, { finalUrl: url, ...overrides }));
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  secondRequest({ server: 'Vercel', 'x-vercel-cache': 'MISS' });
+});
 
 function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
   return {
@@ -98,8 +122,25 @@ describe('auditVercel', () => {
       expect(stale!.details).toMatchObject({ xVercelCache: 'STALE' });
     });
 
-    it.each(['HIT', 'PRERENDER', 'REVALIDATED', 'BYPASS'])('says nothing about a %s', async (status) => {
+    it.each(['HIT', 'PRERENDER', 'REVALIDATED'])('says nothing about a %s', async (status) => {
       const findings = await auditVercel(makeCtx({ headers: { ...VERCEL_HIT, 'x-vercel-cache': status } }));
+      expect(findings).toHaveLength(0);
+    });
+
+    it('reports a BYPASS as info only', async () => {
+      const findings = await auditVercel(makeCtx({ headers: { ...VERCEL_HIT, 'x-vercel-cache': 'BYPASS' } }));
+      expect(codes(findings)).toEqual(['VERCEL_CACHE_BYPASS']);
+      expect(findings[0].severity).toBe('info');
+      expect(findings[0].details).toMatchObject({ xVercelCache: 'BYPASS' });
+    });
+
+    it('says nothing about a BYPASS on a response that sets a cookie', async () => {
+      const headers = { ...VERCEL_HIT, 'x-vercel-cache': 'BYPASS', 'set-cookie': 'session=abc; Path=/' };
+      expect(await auditVercel(makeCtx({ headers }))).toHaveLength(0);
+    });
+
+    it('reports no miss on a BYPASS', async () => {
+      const findings = await auditVercel(makeCtx({ headers: { ...VERCEL_HIT, 'x-vercel-cache': 'BYPASS' } }));
       expect(codes(findings)).not.toContain('VERCEL_CACHE_MISS');
       expect(codes(findings)).not.toContain('VERCEL_CACHE_STALE');
       expect(codes(findings)).not.toContain('VERCEL_CACHE_CONTROL_MISSING');
@@ -149,12 +190,12 @@ describe('auditVercel', () => {
   });
 
   describe('cache-control directives', () => {
-    it('warns when the page missed the cache and sends no cache-control at all', async () => {
+    it('reports a page that missed the cache twice and sends no cache-control at all', async () => {
       const { 'cache-control': _, ...rest } = VERCEL_HIT;
       const findings = await auditVercel(makeCtx({ headers: { ...rest, 'x-vercel-cache': 'MISS' } }));
       const f = findings.find((x) => x.code === 'VERCEL_CACHE_CONTROL_MISSING');
       expect(f).toBeDefined();
-      expect(f!.severity).toBe('warning');
+      expect(f!.severity).toBe('info');
     });
 
     it('warns when cdn-cache-control is visible but carries no lifetime', async () => {
@@ -298,6 +339,118 @@ describe('auditVercel', () => {
       const headers = { ...VERCEL_HIT, 'cdn-cache-control': 's-maxage=abc' };
       const findings = await auditVercel(makeCtx({ headers }));
       expect(codes(findings)).not.toContain('VERCEL_S_MAXAGE_SHORT');
+    });
+  });
+
+  describe('second request on a MISS', () => {
+    const MISS = { ...VERCEL_HIT, 'x-vercel-cache': 'MISS' };
+
+    it.each(['HIT', 'STALE', 'PRERENDER', 'REVALIDATED', 'BYPASS', ''])(
+      'makes no second request when the first answer is %s',
+      async (status) => {
+        await auditVercel(makeCtx({ headers: { ...VERCEL_HIT, 'x-vercel-cache': status } }));
+        expect(mockFetchPage).not.toHaveBeenCalled();
+      },
+    );
+
+    it('a lower-case miss still triggers the recheck', async () => {
+      await auditVercel(makeCtx({ headers: { ...VERCEL_HIT, 'x-vercel-cache': 'miss' } }));
+      expect(mockFetchPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('says nothing when the second response turns out to be personalised', async () => {
+      secondRequest({ ...VERCEL_HIT, 'cdn-cache-control': 's-maxage=10', 'set-cookie': 'session=abc; Path=/' });
+      const findings = await auditVercel(makeCtx({ headers: MISS }));
+      expect(findings).toHaveLength(0);
+    });
+
+    it('makes no second request on a personalised page', async () => {
+      await auditVercel(makeCtx({ headers: { ...MISS, 'set-cookie': 'a=b' } }));
+      await auditVercel(makeCtx({ headers: { ...MISS, 'cache-control': 'private' } }));
+      await auditVercel(makeCtx({ headers: { ...MISS, vary: '*' } }));
+      expect(mockFetchPage).not.toHaveBeenCalled();
+    });
+
+    it('makes no second request off Vercel', async () => {
+      await auditVercel(makeCtx({ headers: { server: 'nginx', 'x-vercel-cache': 'MISS' } }));
+      expect(mockFetchPage).not.toHaveBeenCalled();
+    });
+
+    it('asks once more for the final url with the audit options and without the shared cache', async () => {
+      secondRequest({ ...VERCEL_HIT });
+      const ctx = makeCtx({
+        headers: MISS,
+        finalUrl: 'https://www.example.com/en',
+        fetchOptions: { timeout: 5000, userAgent: 'Googlebot', cache: new Map() },
+      });
+      await auditVercel(ctx);
+      expect(mockFetchPage).toHaveBeenCalledTimes(1);
+      expect(mockFetchPage).toHaveBeenCalledWith('https://www.example.com/en', { timeout: 5000, userAgent: 'Googlebot' });
+      expect(mockFetchPage.mock.calls[0][1]).not.toHaveProperty('cache');
+    });
+
+    it.each(['HIT', 'PRERENDER', 'REVALIDATED'])('treats MISS then %s as a cold miss and says nothing', async (status) => {
+      const { 'cache-control': _, ...rest } = VERCEL_HIT;
+      secondRequest({ ...VERCEL_HIT, 'x-vercel-cache': status });
+      const findings = await auditVercel(makeCtx({ headers: { ...rest, 'x-vercel-cache': 'MISS' } }));
+      expect(findings).toHaveLength(0);
+    });
+
+    it('reads the lifetime from the second response after a cold miss', async () => {
+      secondRequest({ ...VERCEL_HIT, 'cdn-cache-control': 's-maxage=10' });
+      const findings = await auditVercel(makeCtx({ headers: MISS }));
+      expect(codes(findings)).toEqual(['VERCEL_S_MAXAGE_SHORT', 'VERCEL_SWR_MISSING']);
+      expect(findings[0].details).toMatchObject({ xVercelCache: 'HIT', firstRequest: 'MISS', secondRequest: 'HIT', lifetime: 10 });
+    });
+
+    it('reports VERCEL_CACHE_STALE from the second response', async () => {
+      secondRequest({ ...VERCEL_HIT, 'x-vercel-cache': 'STALE' });
+      const findings = await auditVercel(makeCtx({ headers: MISS }));
+      expect(codes(findings)).toEqual(['VERCEL_CACHE_STALE']);
+      expect(findings[0].details).toMatchObject({ xVercelCache: 'STALE', firstRequest: 'MISS', secondRequest: 'STALE' });
+    });
+
+    it('reports VERCEL_CACHE_BYPASS when the second request bypasses the cache', async () => {
+      secondRequest({ ...VERCEL_HIT, 'x-vercel-cache': 'BYPASS' });
+      const findings = await auditVercel(makeCtx({ headers: MISS }));
+      expect(codes(findings)).toEqual(['VERCEL_CACHE_BYPASS']);
+      expect(findings[0].severity).toBe('info');
+      expect(findings[0].details).toMatchObject({ firstRequest: 'MISS', secondRequest: 'BYPASS' });
+    });
+
+    it('reports two misses as info and says so in the text', async () => {
+      const findings = await auditVercel(makeCtx({ headers: MISS }));
+      expect(codes(findings)).toEqual(['VERCEL_CACHE_MISS', 'VERCEL_CACHE_CONTROL_MISSING']);
+      for (const f of findings) {
+        expect(f.severity).toBe('info');
+        expect(f.details).toMatchObject({ xVercelCache: 'MISS', firstRequest: 'MISS', secondRequest: 'MISS' });
+        expect(`${f.message} ${f.explanation} ${f.suggestion}`).not.toMatch(/run the audit again|second run/i);
+      }
+      expect(findings[0].message).toMatch(/two requests/i);
+      expect(findings[1].message).toMatch(/twice/i);
+    });
+
+    const failures: [string, () => void][] = [
+      ['throws', () => mockFetchPage.mockRejectedValue(new Error('timeout'))],
+      ['answers 503', () => secondRequest(MISS, { status: 503 })],
+      ['is redirected elsewhere', () => secondRequest(MISS, { finalUrl: 'https://example.com/login' })],
+      ['returns headers that cannot be read', () => mockFetchPage.mockResolvedValue({ status: 200, finalUrl: 'https://example.com/' } as unknown as Page)],
+      ['answers without x-vercel-cache', () => secondRequest({ server: 'Vercel' })],
+    ];
+
+    it.each(failures)('keeps the first-response findings when the second request %s', async (_, arrange) => {
+      arrange();
+      const { 'cache-control': _cc, ...rest } = VERCEL_HIT;
+      const findings = await auditVercel(
+        makeCtx({ headers: { ...rest, 'x-vercel-cache': 'MISS' }, finalUrl: 'https://app-git-feature-team.vercel.app/' }),
+      );
+      expect(codes(findings)).toEqual(['VERCEL_PREVIEW_INDEXABLE', 'VERCEL_CACHE_MISS', 'VERCEL_CACHE_CONTROL_MISSING']);
+      const control = findings.find((f) => f.code === 'VERCEL_CACHE_CONTROL_MISSING')!;
+      expect(control.severity).toBe('info');
+      expect(findings.find((f) => f.code === 'VERCEL_CACHE_MISS')!.suggestion).toMatch(/run the audit again/i);
+      for (const f of findings.slice(1)) {
+        expect(f.details).toMatchObject({ xVercelCache: 'MISS', firstRequest: 'MISS', secondRequest: 'failed' });
+      }
     });
   });
 

@@ -242,15 +242,25 @@ Progress is printed to stderr as each page is crawled.
 ### Vercel platform
 
 Header-based checks that only make sense on Vercel's CDN. They read the page response
-already fetched for the other modules and make no requests of their own. Off Vercel
-(no `server: Vercel` and no `x-vercel-id`) the module reports that once and stops.
+already fetched for the other modules. The one request of their own comes when that response
+is an `x-vercel-cache: MISS` on a page the CDN could store: the page is fetched once more,
+without the shared cache, so a cold miss after a deploy is not reported as an uncached page.
+That can add up to twice `--timeout` to the audit, more if the second request is redirected.
+Off Vercel (no `server: Vercel` and no `x-vercel-id`) the module reports that once and stops.
 
-* `x-vercel-cache: MISS` or `STALE` on a page the CDN could store (no `set-cookie`,
-  no `private` / `no-store` / `no-cache`, no `Vary: *`)
+* `x-vercel-cache: MISS` on both requests, `STALE`, or `BYPASS` on a page the CDN could store
+  (no `set-cookie`, no `private` / `no-store` / `no-cache`, no `Vary: *`). All three are info:
+  a dynamic route misses every time, and Vercel bypasses the cache on purpose for Draft Mode
+  and for some crawler requests (`VERCEL_CACHE_BYPASS`). A MISS followed by a `HIT`,
+  `PRERENDER` or `REVALIDATED` is a cold miss and reports nothing; the checks below then read
+  the second response. If the second request fails (an error, a non-2xx status, a redirect
+  elsewhere, or no readable `x-vercel-cache`), the first response is reported with advice to
+  run the audit again
 * A page that missed the cache with no CDN lifetime readable from its headers: no `s-maxage`
   in `cache-control` (Vercel's default `public, max-age=0, must-revalidate` is the usual case),
-  or no `s-maxage` / `max-age` in `cdn-cache-control` when that header is present. `s-maxage=0`
-  counts as a lifetime, so a deliberate opt-out is not reported
+  or no `s-maxage` / `max-age` in `cdn-cache-control` when that header is present. Info, both
+  after two misses and when the second request failed. `s-maxage=0` counts as a lifetime, so
+  a deliberate opt-out is not reported
 * CDN lifetime below 60 seconds, and a lifetime without `stale-while-revalidate`. These read
   `s-maxage` from `cache-control`, or `s-maxage` / `max-age` from `cdn-cache-control` when that
   header is present (it overrides `cache-control` entirely). Vercel normally consumes `s-maxage`
