@@ -163,12 +163,79 @@ describe('runAudit', () => {
     ]);
 
     const report = await runAudit('https://example.com');
+    expect(report.summary).not.toHaveProperty('ignored');
     expect(report.summary).toEqual({
       errors: 1,
       warnings: 1,
       info: 1,
       passed: 1,
     });
+  });
+
+  it('marks ignored findings and leaves them out of the severity counts', async () => {
+    mockRobots.mockResolvedValue([
+      {
+        code: 'ROBOTS_BLOCKS_ALL',
+        severity: 'error',
+        category: 'robots',
+        message: 'msg',
+        explanation: 'exp',
+        suggestion: 'sug',
+      },
+    ]);
+    mockMetadata.mockResolvedValue([
+      {
+        code: 'CANONICAL_MISSING',
+        severity: 'warning',
+        category: 'metadata',
+        message: 'msg',
+        explanation: 'exp',
+        suggestion: 'sug',
+      },
+      {
+        code: 'DESCRIPTION_MISSING',
+        severity: 'info',
+        category: 'metadata',
+        message: 'msg',
+        explanation: 'exp',
+        suggestion: 'sug',
+      },
+    ]);
+
+    const report = await runAudit('https://example.com', {
+      ignore: ['ROBOTS_BLOCKS_ALL', 'CANONICAL_MISSING'],
+    });
+
+    expect(report.summary).toEqual({ errors: 0, warnings: 0, info: 1, passed: 0, ignored: 2 });
+
+    const findings = report.modules.flatMap((m) => m.findings);
+    expect(findings).toHaveLength(3);
+    expect(findings.find((f) => f.code === 'ROBOTS_BLOCKS_ALL')?.ignored).toBe(true);
+    expect(findings.find((f) => f.code === 'CANONICAL_MISSING')?.ignored).toBe(true);
+    expect(findings.find((f) => f.code === 'DESCRIPTION_MISSING')).not.toHaveProperty('ignored');
+  });
+
+  it('ignores every finding with a matching code, across modules and urls', async () => {
+    const finding = {
+      code: 'CRAWL_PAGE_TITLE_MISSING' as const,
+      severity: 'warning' as const,
+      category: 'crawl' as const,
+      message: 'msg',
+      explanation: 'exp',
+      suggestion: 'sug',
+    };
+    mockCrawl.mockResolvedValue([
+      { ...finding, url: 'https://example.com/a' },
+      { ...finding, url: 'https://example.com/b' },
+    ]);
+
+    const report = await runAudit('https://example.com', {
+      crawl: 10,
+      ignore: ['CRAWL_PAGE_TITLE_MISSING'],
+    });
+
+    expect(report.summary.warnings).toBe(0);
+    expect(report.summary.ignored).toBe(2);
   });
 
   it('handles module failures gracefully via Promise.allSettled', async () => {

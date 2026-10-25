@@ -30,6 +30,9 @@ inputs:
     description: 'Show detailed information for each finding'
     required: false
     default: 'false'
+  ignore:
+    description: 'Comma-separated issue codes to ignore (e.g. ROBOTS_MISSING,FAVICON_MISSING)'
+    required: false
 
 outputs:
   exit-code:
@@ -60,6 +63,7 @@ runs:
         INPUT_REPORT: ${{ inputs.report }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
+        INPUT_IGNORE: ${{ inputs.ignore }}
       run: |
         args=()
 
@@ -85,6 +89,10 @@ runs:
 
         if [ "$INPUT_VERBOSE" = "true" ]; then
           args+=(--verbose)
+        fi
+
+        if [ -n "$INPUT_IGNORE" ]; then
+          args+=(--ignore "$INPUT_IGNORE")
         fi
 
         # "--" ends option parsing, so a url starting with "-" is a url, not a flag.

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { SeoAuditConfig } from '../types.js';
 
-const CONFIG_FILE = '.seoauditrc.json';
+export const CONFIG_FILE = '.seoauditrc.json';
 
 export function loadConfig(): SeoAuditConfig | undefined {
   const filePath = resolve(process.cwd(), CONFIG_FILE);
@@ -95,6 +95,13 @@ export function validateConfig(raw: unknown): SeoAuditConfig {
       throw new Error(`Error in ${CONFIG_FILE}: "timeout" must be a positive number`);
     }
     config.timeout = obj.timeout;
+  }
+
+  if ('ignore' in obj) {
+    if (!Array.isArray(obj.ignore) || !obj.ignore.every((c): c is string => typeof c === 'string')) {
+      throw new Error(`Error in ${CONFIG_FILE}: "ignore" must be an array of strings`);
+    }
+    config.ignore = obj.ignore;
   }
 
   return config;

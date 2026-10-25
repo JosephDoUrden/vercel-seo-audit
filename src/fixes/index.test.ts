@@ -15,6 +15,16 @@ function makeFinding(overrides: Partial<AuditFinding>): AuditFinding {
 }
 
 describe('generateFixes', () => {
+  it('skips ignored findings', () => {
+    const findings = [
+      makeFinding({ code: 'ROBOTS_MISSING', ignored: true }),
+      makeFinding({ code: 'SITEMAP_MISSING', category: 'sitemap' }),
+    ];
+    const fixes = generateFixes(findings, 'https://example.com');
+
+    expect(fixes.map((f) => f.code)).toEqual(['SITEMAP_MISSING']);
+  });
+
   it('returns fix for ROBOTS_MISSING', () => {
     const findings = [makeFinding({ code: 'ROBOTS_MISSING' })];
     const fixes = generateFixes(findings, 'https://example.com');

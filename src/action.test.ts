@@ -131,6 +131,7 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
       INPUT_REPORT: '',
       INPUT_TIMEOUT: '10000',
       INPUT_VERBOSE: 'false',
+      INPUT_IGNORE: '',
       ...inputs,
     };
     // Same invocation GitHub uses for `shell: bash` in a composite action.
@@ -153,6 +154,7 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
     const url = 'https://x.test/$(touch canary-a); touch canary-b #';
     const ua = 'Mozilla `touch canary-c` "x" $HOME';
     const pages = '/a,/b; touch canary-d';
+    const ignore = 'ROBOTS_MISSING,$(touch canary-e)';
     const r = run({
       INPUT_URL: url,
       INPUT_STRICT: 'true',
@@ -161,6 +163,7 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
       INPUT_REPORT: 'json',
       INPUT_TIMEOUT: '5000',
       INPUT_VERBOSE: 'true',
+      INPUT_IGNORE: ignore,
     }, 0, 'report.json');
     expect(r.status, r.stderr).toBe(0);
     expect(r.argv).toEqual([
@@ -171,10 +174,11 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
       '--report', 'json',
       '--timeout', '5000',
       '--verbose',
+      '--ignore', ignore,
       '--',
       url,
     ]);
-    for (const c of ['canary-a', 'canary-b', 'canary-c', 'canary-d']) {
+    for (const c of ['canary-a', 'canary-b', 'canary-c', 'canary-d', 'canary-e']) {
       expect(existsSync(join(work, c)), c).toBe(false);
     }
     expect(r.output).toContain('exit-code=0\n');
@@ -251,6 +255,7 @@ describe.skipIf(process.platform === 'win32')('action.yml (executed)', () => {
       INPUT_REPORT: '',
       INPUT_TIMEOUT: '',
       INPUT_VERBOSE: '',
+      INPUT_IGNORE: '',
     });
     expect(r.status, r.stderr).toBe(0);
     expect(r.argv).toEqual([
