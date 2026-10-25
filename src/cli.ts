@@ -8,9 +8,11 @@ import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { loadConfig } from './utils/config.js';
 import { resolveIgnore } from './utils/ignore.js';
+import { resolveOnly } from './utils/only.js';
+import { diffReports } from './utils/diff.js';
 import { generateFixes } from './fixes/index.js';
 import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT } from './constants.js';
-import type { AuditFinding, AuditReport, DiffResult } from './types.js';
+import type { AuditReport } from './types.js';
 
 const program = new Command();
 
@@ -31,7 +33,8 @@ program
   .option('--fix', 'Show auto-fix suggestions for supported findings')
   .option('--apply', 'Write suggested fixes to disk (requires --fix)')
   .option('--ignore <codes>', 'Comma-separated issue codes to ignore, repeatable (e.g. ROBOTS_MISSING,FAVICON_MISSING)', (value: string, previous: string[]) => [...previous, value], [] as string[])
-  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[] }) => {
+  .option('--only <modules>', 'Comma-separated audit modules to run, repeatable; their dependencies are added (e.g. vercel,streamedMetadata)', (value: string, previous: string[]) => [...previous, value], [] as string[])
+  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[]; only: string[] }) => {
     // Load config file
     let config;
     try {
@@ -45,6 +48,15 @@ program
     let ignore;
     try {
       ignore = resolveIgnore({ cliValues: options.ignore, cwd: process.cwd(), config });
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(2);
+    }
+
+    // Module selection: --only replaces config
+    let only;
+    try {
+      only = resolveOnly({ cliValues: options.only, config });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(2);
@@ -131,6 +143,7 @@ program
         userAgent,
         crawl,
         ignore,
+        only,
       });
 
       if (options.json) {
@@ -168,22 +181,8 @@ program
           process.exit(2);
         }
 
-        // Ignored findings stay in the diff (tagged by formatDiff). The previous
-        // report has no ignored flags, so dropping them would show a newly
-        // ignored code as resolved.
-        const toKey = (f: AuditFinding) => `${f.code}::${f.url ?? ''}`;
-
-        const currentFindings = auditReport.modules.flatMap((m) => m.findings);
-        const previousFindings = previousReport.modules.flatMap((m) => m.findings);
-
-        const previousKeys = new Set(previousFindings.map(toKey));
-        const currentKeys = new Set(currentFindings.map(toKey));
-
-        const diff: DiffResult = {
-          newIssues: currentFindings.filter((f) => !previousKeys.has(toKey(f))),
-          resolvedIssues: previousFindings.filter((f) => !currentKeys.has(toKey(f))),
-          unchanged: currentFindings.filter((f) => previousKeys.has(toKey(f))),
-        };
+        // With --only, the previous report is compared on the same modules.
+        const diff = diffReports(auditReport, previousReport);
 
         if (options.json) {
           console.log(formatDiffJson(diff));

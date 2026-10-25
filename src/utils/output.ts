@@ -45,6 +45,7 @@ export function formatReport(report: AuditReport, verbose: boolean): string {
   lines.push('');
   lines.push(chalk.bold.underline(`SEO Audit Report for ${report.url}`));
   lines.push(chalk.dim(`  Completed in ${report.duration}ms at ${report.timestamp}`));
+  if (report.only) lines.push(chalk.dim(`  Modules: ${report.only.join(', ')}`));
   lines.push('');
 
   // Summary
@@ -150,6 +151,10 @@ export function formatMarkdown(report: AuditReport): string {
   lines.push(`# SEO Audit Report for ${escapeMd(report.url)}`);
   lines.push('');
   lines.push(`> Completed in ${report.duration}ms at ${report.timestamp}`);
+  if (report.only) {
+    lines.push('>');
+    lines.push(`> Modules: ${escapeMd(report.only.join(', '))}`);
+  }
   lines.push('');
 
   // Summary
@@ -302,7 +307,7 @@ h1{font-size:1.5rem;margin:0 0 8px}
 <header>
 <h1>SEO Audit Report</h1>
 <div class="meta">URL: ${escapeHtml(report.url)} &mdash; ${escapeHtml(report.timestamp)} &mdash; ${report.duration}ms</div>
-</header>
+${report.only ? `<div class="meta">Modules: ${escapeHtml(report.only.join(', '))}</div>\n` : ''}</header>
 <section class="summary">${summaryCards}</section>
 <div class="filters">
 <button class="filter-btn active" data-filter="all">All</button>

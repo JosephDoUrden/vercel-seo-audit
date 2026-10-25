@@ -7,6 +7,7 @@ export interface SeoAuditConfig {
   report?: 'json' | 'md' | 'html';
   timeout?: number;
   ignore?: string[];
+  only?: string[];
 }
 
 export type IssueSeverity = 'error' | 'warning' | 'info' | 'pass';
@@ -149,6 +150,26 @@ export interface FixSuggestion {
   content: string;
 }
 
+/** Audit module ids, in the order they run. These are the names in `report.modules[].module`. */
+export const MODULE_IDS = [
+  'robots',
+  'redirects',
+  'sitemap',
+  'metadata',
+  'favicon',
+  'nextjs',
+  'structuredData',
+  'i18n',
+  'images',
+  'security',
+  'performance',
+  'vercel',
+  'streamedMetadata',
+  'crawl',
+] as const;
+
+export type ModuleId = (typeof MODULE_IDS)[number];
+
 export interface AuditModuleResult {
   module: string;
   findings: AuditFinding[];
@@ -167,6 +188,8 @@ export interface AuditReport {
     ignored?: number;
   };
   modules: AuditModuleResult[];
+  /** The modules that ran when the audit was limited with `--only`, dependencies included. Absent on a full run. */
+  only?: ModuleId[];
 }
 
 export interface DiffResult {

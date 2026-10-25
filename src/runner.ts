@@ -5,7 +5,9 @@ import type {
   AuditReport,
   FetchOptions,
   IssueCode,
+  ModuleId,
 } from './types.js';
+import { MODULE_IDS } from './types.js';
 import { normalizeUrl } from './utils/url.js';
 import { fetchPage } from './utils/http.js';
 import {
@@ -26,37 +28,57 @@ import {
 } from './audit/index.js';
 
 type AuditModule = {
-  name: string;
+  name: ModuleId;
   run: (ctx: AuditContext) => Promise<AuditFinding[]>;
+  /** Modules whose context this one reads; they are added when this one is selected. */
+  deps?: readonly ModuleId[];
 };
 
-const phase1Modules: AuditModule[] = [
-  { name: 'robots', run: auditRobots },
-  { name: 'redirects', run: auditRedirects },
+// Phases run one after another; the modules inside a phase run in parallel.
+// Phase 1 fills ctx.robotsTxt for sitemap, phase 2 fills ctx.sitemapUrls for crawl.
+export const phases: readonly (readonly AuditModule[])[] = [
+  [
+    { name: 'robots', run: auditRobots },
+    { name: 'redirects', run: auditRedirects },
+  ],
+  [
+    { name: 'sitemap', run: auditSitemap, deps: ['robots'] },
+    { name: 'metadata', run: auditMetadata },
+    { name: 'favicon', run: auditFavicon },
+    { name: 'nextjs', run: auditNextjs },
+    { name: 'structuredData', run: auditStructuredData },
+    { name: 'i18n', run: auditI18n },
+    { name: 'images', run: auditImages },
+    { name: 'security', run: auditSecurity },
+    { name: 'performance', run: auditPerformance },
+    { name: 'vercel', run: auditVercel },
+    { name: 'streamedMetadata', run: auditStreamedMetadata },
+  ],
+  [{ name: 'crawl', run: auditCrawl, deps: ['sitemap'] }],
 ];
 
-const phase2Modules: AuditModule[] = [
-  { name: 'sitemap', run: auditSitemap },
-  { name: 'metadata', run: auditMetadata },
-  { name: 'favicon', run: auditFavicon },
-  { name: 'nextjs', run: auditNextjs },
-  { name: 'structuredData', run: auditStructuredData },
-  { name: 'i18n', run: auditI18n },
-  { name: 'images', run: auditImages },
-  { name: 'security', run: auditSecurity },
-  { name: 'performance', run: auditPerformance },
-  { name: 'vercel', run: auditVercel },
-  { name: 'streamedMetadata', run: auditStreamedMetadata },
-];
+const registry = new Map<ModuleId, AuditModule>(phases.flat().map((m) => [m.name, m]));
+
+/** Adds the dependencies of every selected module, transitively, and returns them in run order. */
+function expandOnly(only: readonly ModuleId[]): ModuleId[] {
+  const selected = new Set<ModuleId>();
+  const add = (id: ModuleId): void => {
+    if (selected.has(id)) return;
+    selected.add(id);
+    for (const dep of registry.get(id)?.deps ?? []) add(dep);
+  };
+  only.forEach(add);
+  return MODULE_IDS.filter((id) => selected.has(id));
+}
 
 async function runModules(
   modules: AuditModule[],
   ctx: AuditContext,
 ): Promise<AuditModuleResult[]> {
   const results = await Promise.allSettled(
-    modules.map(async (mod) => {
+    modules.map(async (mod): Promise<AuditModuleResult> => {
       const findings = await mod.run(ctx);
-      return { module: mod.name, findings } satisfies AuditModuleResult;
+      return { module: mod.name, findings };
     }),
   );
 
@@ -77,6 +99,8 @@ export async function runAudit(
     userAgent?: string;
     crawl?: number;
     ignore?: readonly IssueCode[];
+    /** Run only these modules (and the modules they depend on). The page is still fetched once. */
+    only?: readonly ModuleId[];
   } = {},
 ): Promise<AuditReport> {
   const start = Date.now();
@@ -113,18 +137,20 @@ export async function runAudit(
     // Left unset on purpose
   }
 
-  // Phase 1: robots + redirects (parallel)
-  const phase1Results = await runModules(phase1Modules, ctx);
+  // Phases 1-3. Crawl runs when --crawl is set, or when it is named in only.
+  // An only without crawl wins over --crawl, and says so.
+  const only = opts.only && opts.only.length > 0 ? expandOnly(opts.only) : undefined;
+  const selected = new Set<ModuleId>(only ?? MODULE_IDS.filter((id) => id !== 'crawl' || opts.crawl !== undefined));
+  if (only && opts.crawl !== undefined && !selected.has('crawl')) {
+    process.stderr.write('--crawl has no effect: "crawl" is not in --only\n');
+  }
 
-  // Phase 2: sitemap, metadata, favicon, nextjs (parallel)
-  const phase2Results = await runModules(phase2Modules, ctx);
-
-  let allModules = [...phase1Results, ...phase2Results];
-
-  // Phase 3: crawl (only when --crawl is set)
-  if (opts.crawl !== undefined) {
-    const crawlResults = await runModules([{ name: 'crawl', run: auditCrawl }], ctx);
-    allModules.push(...crawlResults);
+  let allModules: AuditModuleResult[] = [];
+  for (const phase of phases) {
+    const modules = phase.filter((m) => selected.has(m.name));
+    if (modules.length > 0) {
+      allModules.push(...(await runModules(modules, ctx)));
+    }
   }
 
   // Mark ignored findings. They stay in the report but not in the counts.
@@ -154,5 +180,6 @@ export async function runAudit(
     duration: Date.now() - start,
     summary,
     modules: allModules,
+    ...(only && { only }),
   };
 }
