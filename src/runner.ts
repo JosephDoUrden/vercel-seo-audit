@@ -4,6 +4,7 @@ import type {
   AuditModuleResult,
   AuditReport,
   FetchOptions,
+  IssueCode,
 } from './types.js';
 import { normalizeUrl } from './utils/url.js';
 import { fetchPage } from './utils/http.js';
@@ -67,7 +68,14 @@ async function runModules(
 
 export async function runAudit(
   url: string,
-  opts: { verbose?: boolean; timeout?: number; pages?: string[]; userAgent?: string; crawl?: number } = {},
+  opts: {
+    verbose?: boolean;
+    timeout?: number;
+    pages?: string[];
+    userAgent?: string;
+    crawl?: number;
+    ignore?: readonly IssueCode[];
+  } = {},
 ): Promise<AuditReport> {
   const start = Date.now();
   const normalized = normalizeUrl(url);
@@ -109,7 +117,7 @@ export async function runAudit(
   // Phase 2: sitemap, metadata, favicon, nextjs (parallel)
   const phase2Results = await runModules(phase2Modules, ctx);
 
-  const allModules = [...phase1Results, ...phase2Results];
+  let allModules = [...phase1Results, ...phase2Results];
 
   // Phase 3: crawl (only when --crawl is set)
   if (opts.crawl !== undefined) {
@@ -117,13 +125,25 @@ export async function runAudit(
     allModules.push(...crawlResults);
   }
 
+  // Mark ignored findings. They stay in the report but not in the counts.
+  const ignore = new Set<IssueCode>(opts.ignore ?? []);
+  if (ignore.size > 0) {
+    allModules = allModules.map((m) => ({
+      ...m,
+      findings: m.findings.map((f) => (ignore.has(f.code) ? { ...f, ignored: true } : f)),
+    }));
+  }
+
   // Compute summary
   const allFindings = allModules.flatMap((m) => m.findings);
+  const counted = allFindings.filter((f) => !f.ignored);
+  const ignoredCount = allFindings.length - counted.length;
   const summary = {
-    errors: allFindings.filter((f) => f.severity === 'error').length,
-    warnings: allFindings.filter((f) => f.severity === 'warning').length,
-    info: allFindings.filter((f) => f.severity === 'info').length,
-    passed: allFindings.filter((f) => f.severity === 'pass').length,
+    errors: counted.filter((f) => f.severity === 'error').length,
+    warnings: counted.filter((f) => f.severity === 'warning').length,
+    info: counted.filter((f) => f.severity === 'info').length,
+    passed: counted.filter((f) => f.severity === 'pass').length,
+    ...(ignoredCount > 0 && { ignored: ignoredCount }),
   };
 
   return {

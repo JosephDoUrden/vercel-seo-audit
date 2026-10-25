@@ -119,6 +119,9 @@ vercel-seo-audit https://your-site.com --crawl
 
 # Crawl with a custom limit
 vercel-seo-audit https://your-site.com --crawl 100
+
+# Ignore issue codes you have accepted (comma-separated, repeatable)
+vercel-seo-audit https://your-site.com --ignore ROBOTS_MISSING,FAVICON_MISSING
 ```
 
 ### Config file
@@ -133,11 +136,30 @@ Create a `.seoauditrc.json` in your project root to set defaults:
   "userAgent": "googlebot",
   "pages": ["/docs", "/team", "/careers"],
   "report": "json",
-  "timeout": 15000
+  "timeout": 15000,
+  "ignore": ["ROBOTS_MISSING", "FAVICON_MISSING"]
 }
 ```
 
 Then just run `vercel-seo-audit` with no arguments. CLI flags always override config values.
+
+### Ignoring findings
+
+Codes you have chosen to live with can come from three places, and the tool uses all of them together:
+
+* `--ignore ROBOTS_MISSING,FAVICON_MISSING` on the command line
+* a `.seoauditignore` file in the current directory, one code per line, `#` starts a comment
+* the `ignore` array in `.seoauditrc.json`
+
+```
+# .seoauditignore
+ROBOTS_MISSING
+HSTS_MISSING  # set at the CDN, not by the app
+```
+
+Codes match exactly, case included. An unknown code stops the run with exit code `2` and names the file or flag it came from.
+
+Ignored findings do not count towards the summary or the exit code. The text report hides them unless you pass `--verbose`, where they carry an `(ignored)` tag; JSON, Markdown and HTML reports keep them with `"ignored": true` or the same tag. `--fix` skips them. `--diff` still lists them, tagged, so a code you have just started ignoring does not show up as resolved.
 
 ---
 
@@ -328,8 +350,11 @@ All inputs:
 | `report` | no | — | Write report file: `json` or `md` |
 | `timeout` | no | `10000` | Request timeout in ms |
 | `verbose` | no | `false` | Show detailed output |
+| `ignore` | no | — | Comma-separated issue codes to ignore |
 
 Outputs: `exit-code`, `report-path`
+
+The action reads `.seoauditignore` and `.seoauditrc.json` from the working directory, so run `actions/checkout` first if you keep ignore lists in the repository. The `ignore` input works without it.
 
 ### Using npx directly
 
@@ -388,10 +413,10 @@ npx vercel-seo-audit https://your-site.com --report md
 * [x] ~~Security headers audit ([#37](https://github.com/JosephDoUrden/vercel-seo-audit/issues/37))~~
 * [x] ~~Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))~~
 * [x] ~~HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))~~
+* [x] ~~`--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41))~~
 
 ### Up next
 
-* [ ] `--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41)) `good first issue`
 * [ ] GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44)) `good first issue`
 * [ ] `--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))
 * [ ] Internal broken link checker ([#42](https://github.com/JosephDoUrden/vercel-seo-audit/issues/42))

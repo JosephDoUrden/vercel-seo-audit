@@ -15,12 +15,16 @@ const severityIcons: Record<IssueSeverity, string> = {
   pass: '✔',
 };
 
+const ignoredTag = (finding: AuditFinding) => (finding.ignored ? ' (ignored)' : '');
+
+const pluralFindings = (n: number) => `${n} finding${n !== 1 ? 's' : ''}`;
+
 function formatFinding(finding: AuditFinding, verbose: boolean): string {
-  const color = severityColors[finding.severity];
+  const color = finding.ignored ? chalk.dim : severityColors[finding.severity];
   const icon = severityIcons[finding.severity];
   const lines: string[] = [];
 
-  lines.push(color(`  ${icon} [${finding.severity.toUpperCase()}] ${finding.message}`));
+  lines.push(color(`  ${icon} [${finding.severity.toUpperCase()}] ${finding.message}${ignoredTag(finding)}`));
   lines.push(chalk.dim(`    ${finding.explanation}`));
   lines.push(chalk.cyan(`    → ${finding.suggestion}`));
 
@@ -50,13 +54,18 @@ export function formatReport(report: AuditReport, verbose: boolean): string {
   if (warnings > 0) lines.push(chalk.yellow(`    ⚠ ${warnings} warning${warnings !== 1 ? 's' : ''}`));
   if (info > 0) lines.push(chalk.blue(`    ℹ ${info} info`));
   if (passed > 0) lines.push(chalk.green(`    ✔ ${passed} passed`));
+  const ignored = report.summary.ignored ?? 0;
+  if (ignored > 0) {
+    lines.push(chalk.dim(`    ${pluralFindings(ignored)} ignored${verbose ? '' : ' (use --verbose to show)'}`));
+  }
   lines.push('');
 
-  // Group findings by category
+  // Group findings by category. Ignored findings only show under --verbose.
   const allFindings: AuditFinding[] = report.modules.flatMap((m) => m.findings);
+  const shown = verbose ? allFindings : allFindings.filter((f) => !f.ignored);
   const categories = new Map<string, AuditFinding[]>();
 
-  for (const finding of allFindings) {
+  for (const finding of shown) {
     const cat = finding.category;
     if (!categories.has(cat)) categories.set(cat, []);
     categories.get(cat)!.push(finding);
@@ -74,6 +83,8 @@ export function formatReport(report: AuditReport, verbose: boolean): string {
 
   if (allFindings.length === 0) {
     lines.push(chalk.green('  No issues found!'));
+  } else if (allFindings.every((f) => f.ignored)) {
+    lines.push(chalk.dim(`  All ${pluralFindings(allFindings.length)} ignored.`));
   }
 
   return lines.join('\n');
@@ -94,7 +105,7 @@ function formatFindingMd(finding: AuditFinding): string {
   const icon = severityMdIcons[finding.severity];
   const lines: string[] = [];
 
-  lines.push(`- ${icon} **[${finding.severity.toUpperCase()}]** ${finding.message}`);
+  lines.push(`- ${icon} **[${finding.severity.toUpperCase()}]** ${finding.message}${finding.ignored ? ' _(ignored)_' : ''}`);
   lines.push(`  - ${finding.explanation}`);
   lines.push(`  - **Fix:** ${finding.suggestion}`);
 
@@ -123,6 +134,7 @@ export function formatMarkdown(report: AuditReport): string {
   if (warnings > 0) lines.push(`| ⚠️ Warnings | ${warnings} |`);
   if (info > 0) lines.push(`| ℹ️ Info | ${info} |`);
   if (passed > 0) lines.push(`| ✅ Passed | ${passed} |`);
+  if (report.summary.ignored) lines.push(`| Ignored | ${report.summary.ignored} |`);
   lines.push('');
 
   // Group findings by category
@@ -187,10 +199,11 @@ export function formatHtml(report: AuditReport): string {
       const items = findings
         .map((f) => {
           const icon = severityHtmlIcons[f.severity] ?? '';
-          let html = `<div class="finding" data-severity="${f.severity}">`;
+          let html = `<div class="finding" data-severity="${f.severity}"${f.ignored ? ' data-ignored="true"' : ''}>`;
           html += `<span class="finding-icon severity-${f.severity}">${icon}</span>`;
           html += `<div class="finding-content">`;
           html += `<strong>[${escapeHtml(f.severity.toUpperCase())}]</strong> ${escapeHtml(f.message)}`;
+          if (f.ignored) html += ` <span class="finding-ignored">(ignored)</span>`;
           html += `<div class="finding-explanation">${escapeHtml(f.explanation)}</div>`;
           html += `<div class="finding-suggestion">&rarr; ${escapeHtml(f.suggestion)}</div>`;
           if (f.url) {
@@ -209,6 +222,7 @@ export function formatHtml(report: AuditReport): string {
     { label: 'Warnings', count: warnings, cls: 'warning' },
     { label: 'Info', count: info, cls: 'info' },
     { label: 'Passed', count: passed, cls: 'pass' },
+    ...(report.summary.ignored ? [{ label: 'Ignored', count: report.summary.ignored, cls: 'ignored' }] : []),
   ]
     .map((c) => `<div class="card severity-${c.cls}"><div class="card-count">${c.count}</div><div class="card-label">${c.label}</div></div>`)
     .join('\n');
@@ -250,6 +264,8 @@ h1{font-size:1.5rem;margin:0 0 8px}
 .finding-suggestion{color:#0369a1;margin-top:2px}
 .finding-url{color:#6b7280;font-size:.8rem;margin-top:2px}
 .no-issues{text-align:center;color:#16a34a;font-size:1.1rem;padding:32px}
+.finding-ignored{color:#6b7280;font-size:.8rem}
+.finding[data-ignored]{opacity:.6}
 .finding.hidden{display:none}
 </style>
 </head>
@@ -306,7 +322,7 @@ export function formatDiff(diff: DiffResult): string {
     lines.push(chalk.green.bold('  New issues:'));
     for (const f of diff.newIssues) {
       const color = severityColors[f.severity];
-      lines.push(color(`    + [${f.severity.toUpperCase()}] ${f.message}${f.url ? ` (${f.url})` : ''}`));
+      lines.push(color(`    + [${f.severity.toUpperCase()}] ${f.message}${ignoredTag(f)}${f.url ? ` (${f.url})` : ''}`));
     }
     lines.push('');
   }
@@ -314,7 +330,7 @@ export function formatDiff(diff: DiffResult): string {
   if (diff.resolvedIssues.length > 0) {
     lines.push(chalk.red.bold('  Resolved issues:'));
     for (const f of diff.resolvedIssues) {
-      lines.push(chalk.dim(`    - [${f.severity.toUpperCase()}] ${f.message}${f.url ? ` (${f.url})` : ''}`));
+      lines.push(chalk.dim(`    - [${f.severity.toUpperCase()}] ${f.message}${ignoredTag(f)}${f.url ? ` (${f.url})` : ''}`));
     }
     lines.push('');
   }

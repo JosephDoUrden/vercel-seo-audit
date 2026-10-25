@@ -121,6 +121,19 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ userAgent: 42 })).toThrow('"userAgent" must be a string');
   });
 
+  it('accepts ignore as an array of strings', () => {
+    const config = validateConfig({ ignore: ['ROBOTS_MISSING', 'FAVICON_MISSING'] });
+    expect(config.ignore).toEqual(['ROBOTS_MISSING', 'FAVICON_MISSING']);
+  });
+
+  it('throws when ignore is not an array', () => {
+    expect(() => validateConfig({ ignore: 'ROBOTS_MISSING' })).toThrow('Error in .seoauditrc.json: "ignore" must be an array of strings');
+  });
+
+  it('throws when ignore contains non-strings', () => {
+    expect(() => validateConfig({ ignore: ['ROBOTS_MISSING', 1] })).toThrow('"ignore" must be an array of strings');
+  });
+
   it('accepts url without protocol', () => {
     const config = validateConfig({ url: 'example.com' });
     expect(config.url).toBe('example.com');

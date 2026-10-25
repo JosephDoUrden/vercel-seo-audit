@@ -7,6 +7,7 @@ import { formatReport, formatJson, formatMarkdown, formatHtml, formatDiff, forma
 import { getExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { loadConfig } from './utils/config.js';
+import { resolveIgnore } from './utils/ignore.js';
 import { generateFixes } from './fixes/index.js';
 import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT } from './constants.js';
 import type { AuditFinding, AuditReport, DiffResult } from './types.js';
@@ -29,11 +30,21 @@ program
   .option('--diff <path>', 'Compare against a previous report.json')
   .option('--fix', 'Show auto-fix suggestions for supported findings')
   .option('--apply', 'Write suggested fixes to disk (requires --fix)')
-  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean }) => {
+  .option('--ignore <codes>', 'Comma-separated issue codes to ignore, repeatable (e.g. ROBOTS_MISSING,FAVICON_MISSING)', (value: string, previous: string[]) => [...previous, value], [] as string[])
+  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[] }) => {
     // Load config file
     let config;
     try {
       config = loadConfig();
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(2);
+    }
+
+    // Ignore list: union of --ignore, .seoauditignore and config
+    let ignore;
+    try {
+      ignore = resolveIgnore({ cliValues: options.ignore, cwd: process.cwd(), config });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(2);
@@ -119,6 +130,7 @@ program
         pages,
         userAgent,
         crawl,
+        ignore,
       });
 
       if (options.json) {
@@ -156,6 +168,9 @@ program
           process.exit(2);
         }
 
+        // Ignored findings stay in the diff (tagged by formatDiff). The previous
+        // report has no ignored flags, so dropping them would show a newly
+        // ignored code as resolved.
         const toKey = (f: AuditFinding) => `${f.code}::${f.url ?? ''}`;
 
         const currentFindings = auditReport.modules.flatMap((m) => m.findings);
@@ -177,7 +192,7 @@ program
         }
       }
 
-      // Show fix suggestions if --fix
+      // Show fix suggestions if --fix (ignored findings get no fix)
       if (options.fix) {
         const allFindings = auditReport.modules.flatMap((m) => m.findings);
         const fixes = generateFixes(allFindings, auditReport.url);
