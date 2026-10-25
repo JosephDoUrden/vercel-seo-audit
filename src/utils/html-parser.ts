@@ -60,6 +60,37 @@ export function getTitle(html: string): string | null {
   return $('title').first().text().trim() || null;
 }
 
+export type MetadataTag = 'title' | 'description' | 'canonical' | 'og:title' | 'og:description' | 'og:image';
+
+// An inline SVG icon carries its own <title>; it is not the page title.
+const METADATA_SELECTORS: Record<MetadataTag, string> = {
+  title: 'title:not(svg title)',
+  description: 'meta[name="description"]',
+  canonical: 'link[rel="canonical"]',
+  'og:title': 'meta[property="og:title"], meta[name="og:title"]',
+  'og:description': 'meta[property="og:description"], meta[name="og:description"]',
+  'og:image': 'meta[property="og:image"], meta[name="og:image"]',
+};
+
+export interface MetadataLocation {
+  head: Set<MetadataTag>;
+  bodyOnly: Set<MetadataTag>;
+}
+
+// Where each metadata tag sits. Body-only means found under <body> and not under <head>,
+// rather than merely not in <head>, so a missing tag is in neither set. The parser hoists
+// stray <title> and <meta> written before any content into <head>, as browsers do.
+export function locateMetadata(html: string): MetadataLocation {
+  const $ = cheerio.load(html);
+  const head = new Set<MetadataTag>();
+  const bodyOnly = new Set<MetadataTag>();
+  for (const [tag, selector] of Object.entries(METADATA_SELECTORS) as [MetadataTag, string][]) {
+    if ($('head').find(selector).length > 0) head.add(tag);
+    else if ($('body').find(selector).length > 0) bodyOnly.add(tag);
+  }
+  return { head, bodyOnly };
+}
+
 export interface FaviconLink {
   rel: string;
   href: string;
