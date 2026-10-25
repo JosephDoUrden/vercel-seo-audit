@@ -33,13 +33,29 @@ inputs:
   ignore:
     description: 'Comma-separated issue codes to ignore (e.g. ROBOTS_MISSING,FAVICON_MISSING)'
     required: false
+  summary:
+    description: 'Add the report to the job summary (writes report.md when report is unset)'
+    required: false
+    default: 'true'
+  pr-comment:
+    description: 'Post the report as a pull request comment, updated in place on reruns (needs pull-requests: write)'
+    required: false
+    default: 'false'
+  comment-key:
+    description: 'Keeps one comment per key, so several workflows or matrix jobs do not overwrite each other'
+    required: false
+    default: 'default'
+  github-token:
+    description: 'Token for the pull request comment'
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   exit-code:
     description: 'Audit exit code (0 = pass, 1 = errors found, 2 = crash)'
     value: ${{ steps.audit.outputs.exit-code }}
   report-path:
-    description: 'Path to report file (if --report was used)'
+    description: 'Path to report file (if report was set, or report.md for summary/pr-comment)'
     value: ${{ steps.audit.outputs.report-path }}
 
 runs:
@@ -64,8 +80,17 @@ runs:
         INPUT_TIMEOUT: ${{ inputs.timeout }}
         INPUT_VERBOSE: ${{ inputs.verbose }}
         INPUT_IGNORE: ${{ inputs.ignore }}
+        INPUT_SUMMARY: ${{ inputs.summary }}
+        INPUT_PR_COMMENT: ${{ inputs.pr-comment }}
       run: |
         args=()
+
+        # The summary and the comment are built from report.md. An explicit
+        # report input always wins; md is only added when report is unset.
+        report="$INPUT_REPORT"
+        if [ -z "$report" ] && { [ "$INPUT_SUMMARY" = "true" ] || [ "$INPUT_PR_COMMENT" = "true" ]; }; then
+          report=md
+        fi
 
         if [ "$INPUT_STRICT" = "true" ]; then
           args+=(--strict)
@@ -79,8 +104,8 @@ runs:
           args+=(--pages "$INPUT_PAGES")
         fi
 
-        if [ -n "$INPUT_REPORT" ]; then
-          args+=(--report "$INPUT_REPORT")
+        if [ -n "$report" ]; then
+          args+=(--report "$report")
         fi
 
         if [ -n "$INPUT_TIMEOUT" ] && [ "$INPUT_TIMEOUT" != "10000" ]; then
@@ -101,6 +126,14 @@ runs:
         if [ -n "$INPUT_URL" ]; then
           target=(-- "$INPUT_URL")
         fi
+
+        # A report already in the directory (checked in, left by an earlier
+        # step, or a symlink to some other file) must never be written through
+        # or posted as this run's result.
+        if [ -n "$report" ]; then
+          rm -rf report.md report.json report.html
+        fi
+
         set +e
         npx vercel-seo-audit@2.8.0 "${args[@]}" "${target[@]}" # x-release-please-version
         EXIT_CODE=$?
@@ -109,10 +142,26 @@ runs:
         echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
 
         # Only report a path for a file the audit actually wrote.
-        if [ "$INPUT_REPORT" = "json" ] && [ -f report.json ]; then
+        if [ "$report" = "json" ] && [ -f report.json ] && [ ! -L report.json ]; then
           echo "report-path=report.json" >> "$GITHUB_OUTPUT"
-        elif [ "$INPUT_REPORT" = "md" ] && [ -f report.md ]; then
+        elif [ "$report" = "md" ] && [ -f report.md ] && [ ! -L report.md ]; then
           echo "report-path=report.md" >> "$GITHUB_OUTPUT"
         fi
 
         exit "$EXIT_CODE"
+
+    # Runs after a failing audit too, and can never change its exit code.
+    - name: Summary and pull request comment
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        INPUT_SUMMARY: ${{ inputs.summary }}
+        INPUT_PR_COMMENT: ${{ inputs.pr-comment }}
+        INPUT_REPORT: ${{ inputs.report }}
+        INPUT_COMMENT_KEY: ${{ inputs.comment-key }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPORT_PATH: ${{ steps.audit.outputs.report-path }}
+        AUDIT_EXIT_CODE: ${{ steps.audit.outputs.exit-code }}
+      run: |
+        node "$GITHUB_ACTION_PATH/action/comment.mjs"

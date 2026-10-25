@@ -258,3 +258,99 @@ describe('ignored findings', () => {
     expect(out).not.toContain('Title tag is missing (ignored)');
   });
 });
+
+// report.md is posted as a bot comment on pull requests, and a preview page
+// controls parts of it (robots.txt rules, URLs, the audited url itself).
+describe('formatMarkdown escaping', () => {
+  const hostile = '<!-- vercel-seo-audit --></details><img src=x onerror=alert(1)> `code`';
+  const escaped = '&lt;!-- vercel-seo-audit --&gt;&lt;/details&gt;&lt;img src=x onerror=alert(1)&gt; &#96;code&#96;';
+
+  it('escapes HTML and backticks in finding messages', () => {
+    const md = formatMarkdown(makeReport({
+      modules: [{ module: 'robots', findings: [makeFinding({ message: `robots.txt blocks ${hostile}` })] }],
+    }));
+    expect(md).not.toContain('<!--');
+    expect(md).not.toContain('</details>');
+    expect(md).not.toContain('<img');
+    expect(md).not.toContain('`code`');
+    expect(md).toContain(`robots.txt blocks ${escaped}`);
+  });
+
+  it('keeps a message on one line', () => {
+    const md = formatMarkdown(makeReport({
+      modules: [{ module: 'robots', findings: [makeFinding({ message: 'blocks a\n\n## Injected\r\nb' })] }],
+    }));
+    expect(md).toContain('blocks a ## Injected b');
+    expect(md).not.toMatch(/^## Injected/m);
+  });
+
+  it('escapes ampersands so existing entities are shown, not decoded', () => {
+    const md = formatMarkdown(makeReport({
+      modules: [{ module: 'robots', findings: [makeFinding({ message: 'a &lt;b&gt;' })] }],
+    }));
+    expect(md).toContain('a &amp;lt;b&amp;gt;');
+  });
+
+  it('cannot break out of the code span around a finding url', () => {
+    const md = formatMarkdown(makeReport({
+      modules: [{ module: 'redirects', findings: [makeFinding({ url: 'https://x.test/a`<img src=x>`b' })] }],
+    }));
+    expect(md).toContain('  - URL: `` https://x.test/a`<img src=x>`b ``');
+  });
+
+  it('collapses line breaks inside a finding url', () => {
+    const md = formatMarkdown(makeReport({
+      modules: [{ module: 'redirects', findings: [makeFinding({ url: 'https://x.test/a\n\n## b' })] }],
+    }));
+    expect(md).toContain('  - URL: `https://x.test/a ## b`');
+  });
+
+  it('leaves an ordinary url in a plain code span', () => {
+    const md = formatMarkdown(makeReport({
+      modules: [{ module: 'redirects', findings: [makeFinding({ url: 'https://example.com/docs' })] }],
+    }));
+    expect(md).toContain('  - URL: `https://example.com/docs`');
+  });
+
+  it('escapes the audited url in the heading', () => {
+    const md = formatMarkdown(makeReport({ url: `https://x.test/${hostile}` }));
+    expect(md.split('\n')[0]).toBe(`# SEO Audit Report for https://x.test/${escaped}`);
+  });
+
+  const inFinding = (overrides: Partial<AuditFinding>) => formatMarkdown(makeReport({
+    modules: [{ module: 'hreflang', findings: [makeFinding(overrides)] }],
+  }));
+
+  it('escapes explanation and suggestion too', () => {
+    const md = inFinding({ explanation: `x ${hostile}`, suggestion: `y ${hostile}` });
+    expect(md).toContain(`  - x ${escaped}`);
+    expect(md).toContain(`  - **Fix:** y ${escaped}`);
+    expect(md).not.toContain('<img');
+  });
+
+  it('keeps an encoded line break from a hreflang value on one line', () => {
+    const md = inFinding({
+      message: 'hreflang en&#10;&#10;## Injected',
+      explanation: 'value en&#x0A;## Injected',
+      suggestion: 'use en&#13;## Injected',
+    });
+    expect(md).toContain('hreflang en&amp;#10;&amp;#10;## Injected');
+    expect(md).toContain('value en&amp;#x0A;## Injected');
+    expect(md).toContain('use en&amp;#13;## Injected');
+    expect(md).not.toMatch(/&#(10|13|x0A);/i);
+  });
+
+  it('does not mention anyone', () => {
+    const md = inFinding({ message: 'by @octocat', explanation: 'cc @acme/team', suggestion: 'ask @octocat' });
+    expect(md).not.toContain('@');
+    expect(md).toContain('by &#64;octocat');
+    expect(md).toContain('cc &#64;acme/team');
+  });
+
+  it('does not link or embed images', () => {
+    const md = inFinding({ message: 'see [x](https://evil.test)', suggestion: '![p](https://evil.test/p.png)' });
+    expect(md).not.toMatch(/\[[^\]]*\]\(https/);
+    expect(md).toContain('see &#91;x](https://evil.test)');
+    expect(md).toContain('!&#91;p](https://evil.test/p.png)');
+  });
+});

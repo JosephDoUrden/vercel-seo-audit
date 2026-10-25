@@ -364,10 +364,69 @@ All inputs:
 | `timeout` | no | `10000` | Request timeout in ms |
 | `verbose` | no | `false` | Show detailed output |
 | `ignore` | no | — | Comma-separated issue codes to ignore |
+| `summary` | no | `true` | Add the report to the job summary |
+| `pr-comment` | no | `false` | Post the report as a pull request comment, updated in place on reruns |
+| `comment-key` | no | `default` | One comment per key; give each workflow or matrix job its own |
+| `github-token` | no | `github.token` | Token used for the pull request comment |
 
 Outputs: `exit-code`, `report-path`
 
 The action reads `.seoauditignore` and `.seoauditrc.json` from the working directory, so run `actions/checkout` first if you keep ignore lists in the repository. The `ignore` input works without it.
+
+### Job summary and pull request comment
+
+The summary and the comment are built from `report.md`. When `report` is unset and `summary` or `pr-comment` is on, the action passes `--report md`, so `report.md` appears in the working directory and `report-path` points to it. Any `report.*` file already there is deleted before the audit runs. An explicit `report` is never overridden: with `report: json` there is no Markdown report, and the summary and comment are skipped with a log line. Set `summary: false` to keep the old behaviour.
+
+The comment is one collapsible block whose first line is a hidden `<!-- vercel-seo-audit:default -->` marker. A rerun edits its own earlier comment instead of adding another: one that starts with the marker and was written by the same account (`github-actions[bot]` for the default token, or the owner of a personal access token). Comments by anyone else are never touched. If several workflows or matrix jobs comment on the same pull request, give each its own `comment-key` so they do not overwrite each other.
+
+The job summary has the full report (up to GitHub's 1 MiB limit). The comment is cut at 60,000 characters, with a note saying the full report is in the job summary. The comment step runs after a failing audit too, and a failure there never changes the audit's exit code. If the audit crashes (exit code `2`), an earlier comment is replaced with a note that the audit failed to run, so it does not keep showing the last run's numbers.
+
+```yaml
+name: SEO Audit
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: JosephDoUrden/vercel-seo-audit@v2
+        with:
+          url: https://your-site.com
+          pr-comment: true
+```
+
+On `pull_request`, a pull request from a fork gets a read-only token, so the comment is skipped and the job summary still has the report.
+
+To audit each Vercel preview deployment, run on `deployment_status`. The action looks for the one open pull request whose head is the deployed commit and comments there. With none, or more than one, it writes the summary only. `deployment_status` runs in the base repository with a write token, so previews of fork pull requests get a comment too.
+
+```yaml
+name: SEO Audit (preview)
+on: deployment_status
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  audit:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Preview'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: JosephDoUrden/vercel-seo-audit@v2
+        with:
+          url: ${{ github.event.deployment_status.environment_url }}
+          pr-comment: true
+```
+
+This workflow needs no `actions/checkout`: the action runs the audit with `npx`. On `deployment_status`, the event's commit is the pull request's head, which for a fork is the fork's code. Checking it out before the action lets that code run, since `npx` honours a committed `.npmrc` (`registry=`). If you need `.seoauditignore` or `.seoauditrc.json`, check out the base branch (`ref: ${{ github.event.repository.default_branch }}`), never the deployment commit.
+
+Vercel's Deployment Protection is on by default for preview deployments, so the audit gets the Vercel login page instead of your site unless previews are reachable without it (a [Deployment Protection Exception](https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/deployment-protection-exceptions), or protection turned off for previews). The action cannot send the Protection Bypass for Automation header yet. Do not put the bypass secret in `url` as a query parameter: the url is printed in the report, the job summary and the comment.
+
+The `deployment_status` path is covered by unit tests with fixture payloads; this repository has no Vercel deployment to run it against.
 
 ### Using npx directly
 
@@ -427,10 +486,10 @@ npx vercel-seo-audit https://your-site.com --report md
 * [x] ~~Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))~~
 * [x] ~~HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))~~
 * [x] ~~`--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41))~~
+* [x] ~~GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44))~~
 
 ### Up next
 
-* [ ] GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44)) `good first issue`
 * [ ] `--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))
 * [ ] Internal broken link checker ([#42](https://github.com/JosephDoUrden/vercel-seo-audit/issues/42))
 
