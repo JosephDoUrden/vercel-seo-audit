@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.6.2](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.6.1...vercel-seo-audit-v2.6.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **http:** report a body timeout on the fallback GET instead of a bare abort ([#158](https://github.com/JosephDoUrden/vercel-seo-audit/issues/158)) ([1b63388](https://github.com/JosephDoUrden/vercel-seo-audit/commit/1b6338878615e5ab23c2e0fe6a08d33be5c8d2be))
+
 ## [2.6.1](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.6.0...vercel-seo-audit-v2.6.1) (2026-10-25)
 
 
