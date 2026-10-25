@@ -147,7 +147,12 @@ async function fetchFollowing(url: string, opts?: FetchOptions): Promise<PageRes
       headers: buildHeaders(opts?.userAgent),
     });
 
-    const body = await res.text();
+    // Headers are in: retire the header timer and give the body its own
+    // deadline, so a stall here reports the same error as the main path
+    // instead of a bare abort.
+    clearTimeout(timer);
+    hopControllers.set(res, controller);
+    const body = await readBody(res, timeout);
     return { body, status: res.status, headers: res.headers };
   } finally {
     clearTimeout(timer);

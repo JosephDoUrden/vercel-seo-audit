@@ -137,6 +137,50 @@ describe('fetchPage against a real socket', () => {
   });
 });
 
+describe('fetchPage when the first hop is slow to answer', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reports a body timeout from the fallback GET, not a bare abort', async () => {
+    let requests = 0;
+    let markClosed: () => void;
+    const stalledClosed = new Promise<void>((resolve) => {
+      markClosed = resolve;
+    });
+    const server = createServer((req, res) => {
+      requests++;
+      if (requests === 1) {
+        // Headers arrive after the 100ms deadline, so the redirect walk gives
+        // up and fetchPage falls back to a plain GET (the cold-start path).
+        setTimeout(() => res.writeHead(200).end('late'), 400);
+        return;
+      }
+      req.socket.once('close', () => markClosed());
+      res.writeHead(200, { 'content-type': 'text/html', 'content-length': 1000 });
+      res.write('<html>');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      await expect(
+        fetchPage(`http://127.0.0.1:${port}/slow`, { timeout: 100 }),
+      ).rejects.toThrow(/Timed out reading body/);
+
+      await Promise.race([
+        stalledClosed,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('fallback socket still open 500ms after the timeout')), 500),
+        ),
+      ]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
 describe('per-audit cache', () => {
   it('serves repeated fetchPage calls from one request', async () => {
     const cache: FetchCache = new Map();
