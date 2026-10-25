@@ -1,4 +1,7 @@
 # Temporary: proves the pull_request comment path on this PR. Removed before merge.
+# The action is checked out into a subdirectory so the workspace root holds no
+# package.json: inside its own checkout npm treats the same-named project as
+# already present and runs no bin.
 name: action-e2e
 on:
   pull_request:
@@ -10,13 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      # The action runs inside its own checkout here, so npx resolves the local package;
-      # build it so the branch's own CLI (not the published one) is what runs.
-      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-      - run: npm ci && npm run build
-      - uses: ./
+          path: action-src
+      - uses: ./action-src
         with:
           url: https://yusufhan.dev
           pr-comment: true
