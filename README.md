@@ -364,6 +364,13 @@ Progress is printed to stderr as each page is crawled.
 * Render-blocking `<script>` tags in `<head>` without `async`/`defer`
 * Large inline `<style>` blocks (> 50 KB)
 * Missing `<link rel="preconnect">` for third-party origins
+* Indexed elements past Googlebot's 2 MB (`HTML_PAST_GOOGLEBOT_LIMIT`, error). Googlebot reads
+  the first 2 MB of an HTML file, uncompressed, and indexes only that part. When the `<title>`,
+  meta description, canonical `<link>`, robots meta, first JSON-LD block or `<h1>` starts at
+  byte 2,097,152 or later, each one is listed with its UTF-8 byte offset in `details.elements`
+* Heavy Next.js flight data (`HTML_RSC_PAYLOAD_HEAVY`, info): the `self.__next_f.push(` scripts
+  the App Router streams for hydration are more than half of an HTML document over 500 KiB
+  (`details.totalBytes`, `details.rscBytes`, `details.share`)
 
 ### Next.js / Vercel
 

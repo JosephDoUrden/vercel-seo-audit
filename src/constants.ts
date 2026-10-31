@@ -7,6 +7,10 @@ export const MAX_REDIRECTS = 20;
 // sitemap, 50 MB (50,000,000 bytes).
 export const MAX_HTML_BYTES = 10 * 1024 * 1024;
 export const MAX_SITEMAP_BYTES = 50_000_000;
+// Googlebot reads the first 2 MB of an HTML file, counted on the uncompressed data, and
+// indexes only that part (developers.google.com/search/docs/crawling-indexing/googlebot,
+// last updated 03 Feb 2026).
+export const GOOGLEBOT_HTML_LIMIT_BYTES = 2 * 1024 * 1024;
 export const VERSION = '2.11.0'; // x-release-please-version
 export const USER_AGENT = 'vercel-seo-audit/2.11.0'; // x-release-please-version
 export const SITEMAP_SAMPLE_SIZE = 10;
