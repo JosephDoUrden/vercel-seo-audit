@@ -7,8 +7,12 @@
 
 > **If you're using Vercel and Google hates your site, this is for you.**
 
-A fast, developer-friendly CLI that explains **why Google isn't indexing your Next.js site** — beyond the vague stuff in Search Console.
-It detects the misconfigs that silently kill crawling and indexing: **redirect traps (308), missing robots/sitemap, noindex headers, canonical mismatches, and Vercel/Next.js quirks**.
+A CLI that explains **why Google isn't indexing your Next.js site**, from what the deployed site sends back. Two of its checks are not in other SEO audit tools:
+
+* **Preview deployments left indexable.** A `*.vercel.app` URL served without `x-robots-tag: noindex` or a robots meta `noindex` (`VERCEL_PREVIEW_INDEXABLE`): an error on branch URLs, which are always previews, and a warning on other generated URLs, which may be production.
+* **Metadata streamed into `<body>`.** Next.js 15.2 and later stream dynamic `generateMetadata` output into `<body>` for every user agent not on their HTML-limited bot list, so a crawler that reads only `<head>` and does not run JavaScript sees no title, description or canonical. The page is fetched once more as a bot on that list to confirm (`METADATA_STREAMED_TO_BODY`, `METADATA_NOT_IN_HEAD`, `METADATA_IN_HEAD`).
+
+Beyond those, the audit covers redirect chains and loops, the trailing-slash 308, robots.txt, the sitemap, `noindex` headers, canonical mismatches, Open Graph, favicons, JSON-LD, hreflang, images, security headers, performance hints and Vercel CDN cache headers, with `--crawl` to run the page checks over every sitemap URL. The 14 modules are listed under [Running some modules only](#running-some-modules-only).
 
 ---
 
@@ -68,7 +72,7 @@ SEO Audit Report for https://example.com/
 
 These are the issues that silently tank your rankings on Next.js/Vercel:
 
-- **Next.js 308 trailing-slash traps** — `trailingSlash: true` creates 308 redirect loops that waste crawl budget and confuse Google.
+- **Trailing-slash 308s** — Next.js answers the other form of every URL (with or without the slash, as set by `trailingSlash` in `next.config.js`) with one 308. That is one redirect per URL, not a loop, and it is reported as info; it costs a hop on every page when your sitemap, canonicals or inbound links use the form that redirects.
 - **www / non-www domain redirects** — serving the same content on both domains without a redirect splits link equity and causes duplicate-content issues.
 - **Middleware rewrites & redirects affecting crawlers** — Next.js middleware can rewrite or redirect in ways that only affect bots, breaking indexing without any visible symptoms in a browser.
 - **Canonical mismatch** — the `<link rel="canonical">` points to a different URL than the page actually lives at, telling Google to ignore the page.
@@ -125,7 +129,13 @@ vercel-seo-audit https://your-site.com --ignore ROBOTS_MISSING,FAVICON_MISSING
 
 # Run only some audit modules (comma-separated, repeatable)
 vercel-seo-audit https://your-site.com --only vercel,streamedMetadata
+
+# Print starter files for findings that have one, and write them with --apply
+vercel-seo-audit https://your-site.com --fix
+vercel-seo-audit https://your-site.com --fix --apply
 ```
+
+`--fix` has a file for three findings: `public/robots.txt` for `ROBOTS_MISSING`, `public/sitemap.xml` for `SITEMAP_MISSING` and a `next.config.js` with `trailingSlash: true` for `NEXTJS_TRAILING_SLASH_308`. `--apply` asks before writing and never overwrites a file that exists.
 
 Every JSON report carries a `page` object describing the up-front fetch of the audited URL:
 `{ "status": 200, "finalUrl": "https://your-site.com/", "nextjs": true }`. `status` and
@@ -205,7 +215,7 @@ A limited run says so: the text, Markdown and HTML reports print a `Modules:` li
 
 * Redirect chains & loops (homepage + common pages)
 * HTTP → HTTPS redirect
-* Trailing slash consistency (catches Next.js **308 traps**)
+* Trailing slash: whether the other form of the URL redirects, and with which status (Next.js uses a 308)
 * Meta refresh redirects (`<meta http-equiv="refresh">`)
 * Samples common routes: `/about`, `/contact`, `/blog`, `/pricing` (customisable with `--pages`)
 
@@ -479,9 +489,9 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
       - run: npx vercel-seo-audit https://your-site.com --strict --report json
 ```
 
@@ -526,17 +536,19 @@ npx vercel-seo-audit https://your-site.com --report md
 * [x] ~~HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))~~
 * [x] ~~`--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41))~~
 * [x] ~~GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44))~~
+* [x] ~~`--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))~~
+* [x] ~~`--only` to run selected modules ([#166](https://github.com/JosephDoUrden/vercel-seo-audit/pull/166))~~
+* [x] ~~Vercel CDN cache and preview checks ([#126](https://github.com/JosephDoUrden/vercel-seo-audit/pull/126))~~
+* [x] ~~Metadata streamed into `<body>` on Next.js 15.2+ ([#162](https://github.com/JosephDoUrden/vercel-seo-audit/pull/162))~~
 
 ### Up next
 
-* [ ] `--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))
 * [ ] Internal broken link checker ([#42](https://github.com/JosephDoUrden/vercel-seo-audit/issues/42))
 
 ### Future
 
 * [ ] Page speed score via PageSpeed Insights API ([#43](https://github.com/JosephDoUrden/vercel-seo-audit/issues/43))
 * [ ] Accessibility basics audit ([#45](https://github.com/JosephDoUrden/vercel-seo-audit/issues/45))
-* [ ] Multi-URL batch auditing ([#46](https://github.com/JosephDoUrden/vercel-seo-audit/issues/46))
 * [ ] Plugin system for custom audit checks ([#47](https://github.com/JosephDoUrden/vercel-seo-audit/issues/47))
 
 ---
