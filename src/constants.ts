@@ -11,8 +11,8 @@ export const MAX_SITEMAP_BYTES = 50_000_000;
 // indexes only that part (developers.google.com/search/docs/crawling-indexing/googlebot,
 // last updated 03 Feb 2026).
 export const GOOGLEBOT_HTML_LIMIT_BYTES = 2 * 1024 * 1024;
-export const VERSION = '2.17.0'; // x-release-please-version
-export const USER_AGENT = 'vercel-seo-audit/2.17.0'; // x-release-please-version
+export const VERSION = '2.18.0'; // x-release-please-version
+export const USER_AGENT = 'vercel-seo-audit/2.18.0'; // x-release-please-version
 export const SITEMAP_SAMPLE_SIZE = 10;
 // "All formats limit a single sitemap to 50MB (uncompressed) or 50,000 URLs."
 // https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap, updated 08 Jul 2026.

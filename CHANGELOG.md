@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.18.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.17.0...vercel-seo-audit-v2.18.0) (2026-10-31)
+
+
+### Features
+
+* **cli:** tag modules by pack and add --skip-pack ([#206](https://github.com/JosephDoUrden/vercel-seo-audit/issues/206)) ([5b9bd96](https://github.com/JosephDoUrden/vercel-seo-audit/commit/5b9bd96850538547e0edcf49419fc61b26d39920))
+
 ## [2.17.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.16.0...vercel-seo-audit-v2.17.0) (2026-10-31)
 
 
