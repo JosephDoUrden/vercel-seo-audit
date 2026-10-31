@@ -258,10 +258,34 @@ describe('runAudit', () => {
     ]);
 
     const report = await runAudit('https://example.com');
-    // redirects module should be excluded but robots should still be present
-    const moduleNames = report.modules.map((m) => m.module);
-    expect(moduleNames).toContain('robots');
-    expect(moduleNames).not.toContain('redirects');
+    const redirects = report.modules.find((m) => m.module === 'redirects');
+
+    // The other modules still run; the failed one reports the failure.
+    expect(report.modules.find((m) => m.module === 'robots')?.findings).toHaveLength(1);
+    expect(redirects?.findings).toEqual([
+      expect.objectContaining({
+        code: 'MODULE_FAILED',
+        severity: 'error',
+        category: 'redirect',
+        details: { module: 'redirects', message: 'Unexpected error' },
+      }),
+    ]);
+    expect(redirects?.findings[0].message).toContain('redirects');
+    expect(report.summary.errors).toBe(1);
+  });
+
+  it('keeps the module order when one fails, and names a non-Error rejection', async () => {
+    mockCrawl.mockRejectedValue('boom');
+    mockStructuredData.mockRejectedValue(new TypeError('x is undefined'));
+
+    const report = await runAudit('https://example.com', { crawl: 3 });
+    const failed = report.modules.flatMap((m) => m.findings).filter((f) => f.code === 'MODULE_FAILED');
+
+    expect(report.modules.map((m) => m.module)).toEqual([...MODULE_IDS]);
+    expect(failed.map((f) => [f.category, f.details])).toEqual([
+      ['structured-data', { module: 'structuredData', message: 'x is undefined' }],
+      ['crawl', { module: 'crawl', message: 'boom' }],
+    ]);
   });
 
   it('normalizes the input URL', async () => {

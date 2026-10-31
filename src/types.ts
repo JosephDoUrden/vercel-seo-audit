@@ -41,6 +41,8 @@ export const ISSUE_CODES = [
   'TARGET_UNREACHABLE',
   'TARGET_HTTP_ERROR',
   'TARGET_NOT_HTML',
+  // An audit module that threw instead of returning findings
+  'MODULE_FAILED',
   // A response cut at MAX_BODY_BYTES (the audited page, a sitemap or a crawled page)
   'RESPONSE_TOO_LARGE',
   // Indexing issues

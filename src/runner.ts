@@ -4,6 +4,7 @@ import type {
   AuditModuleResult,
   AuditReport,
   FetchOptions,
+  IssueCategory,
   IssueCode,
   ModuleId,
   PageFacts,
@@ -76,23 +77,52 @@ function expandOnly(only: readonly ModuleId[]): ModuleId[] {
   return MODULE_IDS.filter((id) => selected.has(id));
 }
 
+// The category a module's MODULE_FAILED finding is filed under.
+const MODULE_CATEGORY: Record<ModuleId, IssueCategory> = {
+  robots: 'robots',
+  redirects: 'redirect',
+  sitemap: 'sitemap',
+  metadata: 'metadata',
+  favicon: 'favicon',
+  nextjs: 'nextjs',
+  structuredData: 'structured-data',
+  i18n: 'i18n',
+  images: 'images',
+  security: 'security',
+  performance: 'performance',
+  vercel: 'vercel',
+  streamedMetadata: 'nextjs',
+  crawl: 'crawl',
+};
+
+function moduleFailed(module: ModuleId, err: unknown, url: string): AuditFinding {
+  const message = describeError(err);
+  return {
+    code: 'MODULE_FAILED',
+    severity: 'error',
+    category: MODULE_CATEGORY[module],
+    message: `The ${module} checks failed to run: ${message}`,
+    explanation: 'The module threw before it could report, so its checks are missing from this report.',
+    suggestion: 'Run the audit again. If it keeps failing, open an issue with this message.',
+    details: { module, message },
+    url,
+  };
+}
+
+// A module that throws is reported as a MODULE_FAILED error in its own slot,
+// so the failure shows in the report and the exit code instead of vanishing.
 async function runModules(
   modules: AuditModule[],
   ctx: AuditContext,
 ): Promise<AuditModuleResult[]> {
-  const results = await Promise.allSettled(
-    modules.map(async (mod): Promise<AuditModuleResult> => {
-      const findings = await mod.run(ctx);
-      return { module: mod.name, findings };
-    }),
-  );
+  const results = await Promise.allSettled(modules.map((mod) => mod.run(ctx)));
 
-  return results
-    .filter(
-      (r): r is PromiseFulfilledResult<AuditModuleResult> =>
-        r.status === 'fulfilled',
-    )
-    .map((r) => r.value);
+  return results.map((r, i) => {
+    const module = modules[i].name;
+    return r.status === 'fulfilled'
+      ? { module, findings: r.value }
+      : { module, findings: [moduleFailed(module, r.reason, ctx.normalizedUrl)] };
+  });
 }
 
 /** The error's message, with its cause's when fetch wraps one (`fetch failed: getaddrinfo ENOTFOUND ...`). */
