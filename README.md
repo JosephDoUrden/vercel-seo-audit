@@ -124,7 +124,7 @@ const exitCode = getExitCode(report.summary, false);
 console.log(formatAgent(report, { version: VERSION, exitCode }));
 ```
 
-`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`, `skipPacks`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
+`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`, `skipPacks`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address, whether written as an address or as a name that resolves to one. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
 
 ```ts
 const controller = new AbortController();
@@ -355,10 +355,14 @@ The page is fetched once before any module runs.
 
 Wherever the audit follows a URL it did not get from you (redirect hops, child sitemaps,
 crawled pages, `og:image` / `twitter:image` / `<img>` probes, hreflang alternates), it refuses
-literal loopback, private, link-local and cloud-metadata addresses such as `169.254.169.254`,
-unless the audited URL is itself on one (auditing `http://localhost:3000` still works). Only
-literal addresses are checked: no DNS lookup is made, so a public name that resolves to a
-private address is not caught.
+loopback, private, link-local, reserved and cloud-metadata addresses such as `169.254.169.254`,
+IPv6 forms that carry one included, unless the audited URL is itself on one (auditing
+`http://localhost:3000` still works). A literal address is refused before any request. A name
+is checked when the connection is made: if any address it resolves to is private the request
+fails, and a lookup that fails is an error too, so a name that resolves differently from one
+request to the next is caught as well. Because only a literal private host or `localhost`
+counts as a local audit, a site on a private DNS name (`http://intranet.example/`) is refused;
+audit it by `localhost` or its address.
 
 ### Metadata
 

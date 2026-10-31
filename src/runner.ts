@@ -265,8 +265,8 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 /**
  * Audits one URL and returns the full report. Every request it makes, the page's
  * redirects, sitemap URLs and crawled links included, is refused when it points at
- * a private address and `url` does not, so a caller passing user input gets the same
- * guard as the CLI.
+ * a private address, or at a name that resolves to one, and `url` is not on a private
+ * host, so a caller passing user input gets the same guard as the CLI.
  * With `opts.signal`, it rejects as soon as the signal fires.
  */
 export async function runAudit(url: string, opts: RunAuditOptions = {}): Promise<AuditReport> {

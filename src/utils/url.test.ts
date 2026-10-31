@@ -206,6 +206,21 @@ describe('isPrivateAddress', () => {
     'http://[fe80::1]/',
     'http://[::ffff:127.0.0.1]/',
     'http://[::ffff:a9fe:a9fe]/',
+    'http://[::ffff:0:a9fe:a9fe]/',
+    'http://[0:0:0:0:0:FFFF:7F00:0001]/',
+    'http://[::127.0.0.1]/',
+    'http://[64:ff9b::a9fe:a9fe]/',
+    'http://[64:ff9b::10.0.0.1]/',
+    'http://[64:ff9b:1::808:808]/',
+    'http://[2002:7f00:1::]/',
+    'http://[2002:a9fe:a9fe::1]/',
+    'http://[fec0::1]/',
+    'http://198.18.0.1/',
+    'http://198.19.255.255/',
+    'http://240.0.0.1/',
+    'http://255.255.255.255/',
+    'http://224.0.0.1/',
+    'http://0.1.2.3/',
   ])('flags %s', (url) => {
     expect(isPrivateAddress(host(url))).toBe(true);
   });
@@ -219,9 +234,24 @@ describe('isPrivateAddress', () => {
     'http://169.255.0.1/',
     'http://[2606:4700::1111]/',
     'http://[::ffff:8.8.8.8]/',
+    'http://[64:ff9b::808:808]/',
+    'http://[2002:808:808::1]/',
+    'http://[2001:db8::1]/',
+    'http://198.17.0.1/',
+    'http://198.20.0.1/',
+    'http://223.255.255.255/',
     'http://10.example.com/',
   ])('leaves %s alone', (url) => {
     expect(isPrivateAddress(host(url))).toBe(false);
+  });
+
+  it('reads addresses as a DNS answer gives them, without brackets or new URL()', () => {
+    expect(isPrivateAddress('::FFFF:127.0.0.1')).toBe(true);
+    expect(isPrivateAddress('0:0:0:0:0:ffff:a9fe:a9fe')).toBe(true);
+    expect(isPrivateAddress('fe80::1%en0')).toBe(true);
+    expect(isPrivateAddress('not:an:address')).toBe(true);
+    expect(isPrivateAddress('2606:4700::1111')).toBe(false);
+    expect(isPrivateAddress('93.184.215.14')).toBe(false);
   });
 });
 
