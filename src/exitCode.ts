@@ -12,3 +12,8 @@ export function getExitCode(
   if (strict && summary.warnings > 0) return 1;
   return 0;
 }
+
+/** Commander's own exits: 0 stays 0 (--help, --version), and a usage error is 2, like any other bad input. */
+export function usageExitCode(commanderExitCode: number): number {
+  return commanderExitCode === 0 ? 0 : 2;
+}

@@ -4,14 +4,16 @@ import { dirname, resolve } from 'node:path';
 import { Command } from 'commander';
 import { runAudit } from './runner.js';
 import { formatReport, formatJson, formatMarkdown, formatHtml, formatDiff, formatDiffJson, formatFixes } from './utils/output.js';
-import { getExitCode } from './exitCode.js';
+import { getExitCode, usageExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { loadConfig } from './utils/config.js';
 import { resolveIgnore } from './utils/ignore.js';
 import { resolveOnly } from './utils/only.js';
 import { diffReports } from './utils/diff.js';
 import { generateFixes } from './fixes/index.js';
-import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT } from './constants.js';
+import { formatAgent, resolveFormat } from './utils/agent-format.js';
+import { explain } from './utils/catalog.js';
+import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT, VERSION } from './constants.js';
 import type { AuditReport } from './types.js';
 
 const program = new Command();
@@ -19,9 +21,10 @@ const program = new Command();
 program
   .name('vercel-seo-audit')
   .description('Diagnose SEO and indexing issues for Next.js/Vercel websites')
-  .version('2.11.0') // x-release-please-version
+  .version(VERSION)
   .argument('[url]', 'URL to audit (e.g. https://yusufhan.dev)')
-  .option('--json', 'Output results as JSON')
+  .option('--json', 'Output the full report as JSON')
+  .option('--format <format>', 'Output format: text, or agent for the compact JSON contract coding agents read')
   .option('--verbose', 'Show detailed information for each finding')
   .option('-S, --strict', 'Fail on any SEO issues found, including warnings')
   .option('--timeout <ms>', 'Request timeout in milliseconds', '10000')
@@ -34,7 +37,7 @@ program
   .option('--apply', 'Write suggested fixes to disk (requires --fix)')
   .option('--ignore <codes>', 'Comma-separated issue codes to ignore, repeatable (e.g. ROBOTS_MISSING,FAVICON_MISSING)', (value: string, previous: string[]) => [...previous, value], [] as string[])
   .option('--only <modules>', 'Comma-separated audit modules to run, repeatable; their dependencies are added (e.g. vercel,streamedMetadata)', (value: string, previous: string[]) => [...previous, value], [] as string[])
-  .action(async (urlArg: string | undefined, options: { json?: boolean; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[]; only: string[] }) => {
+  .action(async (urlArg: string | undefined, options: { json?: boolean; format?: string; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[]; only: string[] }) => {
     // Load config file
     let config;
     try {
@@ -59,6 +62,25 @@ program
       only = resolveOnly({ cliValues: options.only, config });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
+      process.exit(2);
+    }
+
+    // Output format: --format > config > text. A --json flag beats a format from the config.
+    let format;
+    try {
+      format = resolveFormat({ cliValue: options.format, config });
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(2);
+    }
+    if (options.json && options.format === undefined) format = 'text';
+    const agent = format === 'agent';
+    if (agent && options.json) {
+      console.error('Error: --json and --format agent cannot be used together');
+      process.exit(2);
+    }
+    if (agent && options.fix) {
+      console.error('Error: --fix cannot be used with --format agent; each finding carries its fix');
       process.exit(2);
     }
 
@@ -146,7 +168,18 @@ program
         only,
       });
 
-      if (options.json) {
+      // Exit code based on findings; 2 when the page could not be fetched at all
+      const unreachable = auditReport.modules.some(
+        (m) => m.module === 'target' && m.findings.some((f) => f.code === 'TARGET_UNREACHABLE'),
+      );
+      const code = getExitCode(auditReport.summary, strict ?? false, !unreachable);
+
+      // --format agent prints one JSON document, with the diff inside it, and nothing else on stdout.
+      if (agent) {
+        const previous = options.diff ? readPreviousReport(options.diff) : undefined;
+        const diff = previous && { result: diffReports(auditReport, previous), previous };
+        console.log(formatAgent(auditReport, { version: VERSION, exitCode: code, diff }));
+      } else if (options.json) {
         console.log(formatJson(auditReport));
       } else {
         console.log(formatReport(auditReport, verbose ?? false));
@@ -164,25 +197,13 @@ program
         const content = formatters[report]();
         const filePath = resolve(process.cwd(), fileName);
         writeFileSync(filePath, content, 'utf-8');
-        console.log(`\nReport written to ${fileName}`);
+        (agent ? console.error : console.log)(`${agent ? '' : '\n'}Report written to ${fileName}`);
       }
 
       // Diff against previous report (CLI-only)
-      if (options.diff) {
-        let previousReport: AuditReport;
-        try {
-          const raw = readFileSync(resolve(process.cwd(), options.diff), 'utf-8');
-          previousReport = JSON.parse(raw) as AuditReport;
-          if (!Array.isArray(previousReport.modules)) {
-            throw new Error('Invalid report: missing modules array');
-          }
-        } catch (err) {
-          console.error(`Error reading previous report: ${err instanceof Error ? err.message : err}`);
-          process.exit(2);
-        }
-
+      if (options.diff && !agent) {
         // With --only, the previous report is compared on the same modules.
-        const diff = diffReports(auditReport, previousReport);
+        const diff = diffReports(auditReport, readPreviousReport(options.diff));
 
         if (options.json) {
           console.log(formatDiffJson(diff));
@@ -223,11 +244,6 @@ program
         }
       }
 
-      // Exit code based on findings; 2 when the page could not be fetched at all
-      const unreachable = auditReport.modules.some(
-        (m) => m.module === 'target' && m.findings.some((f) => f.code === 'TARGET_UNREACHABLE'),
-      );
-      const code = getExitCode(auditReport.summary, strict ?? false, !unreachable);
       if (code !== 0 && strict && auditReport.summary.warnings > 0) {
         console.error('Warnings found in strict mode');
       }
@@ -237,5 +253,35 @@ program
       process.exit(2);
     }
   });
+
+// Before the subcommand, so explain inherits it.
+program.exitOverride((err) => process.exit(usageExitCode(err.exitCode)));
+
+program
+  .command('explain')
+  .description('Explain an issue code: the module that reports it, its category and what it means')
+  .argument('<code>', 'Issue code, e.g. NOINDEX_DETECTED')
+  .action((code: string) => {
+    const result = explain(code);
+    if (!result.ok) {
+      console.error(result.error);
+      process.exit(2);
+    }
+    console.log(result.text);
+  });
+
+/** Reads a report saved with --report json for --diff, or exits 2. */
+function readPreviousReport(path: string): AuditReport {
+  try {
+    const previous = JSON.parse(readFileSync(resolve(process.cwd(), path), 'utf-8')) as AuditReport;
+    if (!Array.isArray(previous.modules)) {
+      throw new Error('Invalid report: missing modules array');
+    }
+    return previous;
+  } catch (err) {
+    console.error(`Error reading previous report: ${err instanceof Error ? err.message : err}`);
+    process.exit(2);
+  }
+}
 
 program.parse();

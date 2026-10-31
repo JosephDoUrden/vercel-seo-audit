@@ -16,3 +16,15 @@ describe('README module table', () => {
     expect(tableIds()).toEqual([...MODULE_IDS]);
   });
 });
+
+describe('AGENTS.md', () => {
+  const agents = readFileSync(fileURLToPath(new URL('../AGENTS.md', import.meta.url)), 'utf-8');
+
+  it('stays short and shows the two commands the README points at', () => {
+    expect(agents.trimEnd().split('\n').length).toBeLessThanOrEqual(80);
+    for (const command of ['npx vercel-seo-audit https://your-site.com --format agent', 'npx vercel-seo-audit explain ']) {
+      expect(agents).toContain(command);
+      expect(readme).toContain(command);
+    }
+  });
+});

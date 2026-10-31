@@ -147,6 +147,15 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ only: [] })).toThrow('Error in .seoauditrc.json: "only" must list at least one module');
   });
 
+  it('accepts format text or agent', () => {
+    expect(validateConfig({ format: 'agent' }).format).toBe('agent');
+    expect(validateConfig({ format: 'text' }).format).toBe('text');
+  });
+
+  it('throws when format is anything else', () => {
+    expect(() => validateConfig({ format: 'json' })).toThrow('Error in .seoauditrc.json: "format" must be "text" or "agent"');
+  });
+
   it('accepts url without protocol', () => {
     const config = validateConfig({ url: 'example.com' });
     expect(config.url).toBe('example.com');

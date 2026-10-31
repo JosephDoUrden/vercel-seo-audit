@@ -7,6 +7,7 @@ export const MAX_REDIRECTS = 20;
 // sitemap, 50 MB (50,000,000 bytes).
 export const MAX_HTML_BYTES = 10 * 1024 * 1024;
 export const MAX_SITEMAP_BYTES = 50_000_000;
+export const VERSION = '2.11.0'; // x-release-please-version
 export const USER_AGENT = 'vercel-seo-audit/2.11.0'; // x-release-please-version
 export const SITEMAP_SAMPLE_SIZE = 10;
 // "All formats limit a single sitemap to 50MB (uncompressed) or 50,000 URLs."

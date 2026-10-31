@@ -114,5 +114,12 @@ export function validateConfig(raw: unknown): SeoAuditConfig {
     config.only = obj.only;
   }
 
+  if ('format' in obj) {
+    if (obj.format !== 'text' && obj.format !== 'agent') {
+      throw new Error(`Error in ${CONFIG_FILE}: "format" must be "text" or "agent"`);
+    }
+    config.format = obj.format;
+  }
+
   return config;
 }
