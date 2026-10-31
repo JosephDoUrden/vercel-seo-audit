@@ -17,6 +17,23 @@ const FORMATS: readonly OutputFormat[] = ['text', 'agent'];
 /** Caps on `details`, so one finding cannot flood an agent's context. */
 export const MAX_DETAIL_ITEMS = 10;
 export const MAX_DETAIL_CHARS = 200;
+/** The cap on `message` and `fix`, which quote the page (a title, a URL) and so have no length of their own. */
+export const MAX_TEXT_CHARS = 500;
+
+// C0 controls other than tab and newline, and the bidi embedding, override and
+// isolate characters. A page can plant either in a title or a URL to change how
+// the report reads in a terminal or to an agent, so no string keeps them.
+const UNSAFE_CHARS = /[\u0000-\u0008\u000B-\u001F\u202A-\u202E\u2066-\u2069]/g;
+
+const clean = (text: string): string => text.replace(UNSAFE_CHARS, '');
+
+/** Strips the characters above from `text`, then cuts it to `max`, and reports the cut. */
+function capText(text: string, max: number, cut: { truncated: boolean }): string {
+  const safe = clean(text);
+  if (safe.length <= max) return safe;
+  cut.truncated = true;
+  return safe.slice(0, max);
+}
 
 export interface AgentFinding {
   code: IssueCode;
@@ -45,7 +62,7 @@ export interface AgentReport {
   findings: AgentFinding[];
   /** Module ids that did not run: left out by `--only`, skipped on a non-HTML page, or never reached. */
   skipped: ModuleId[];
-  /** Whether any `details` were cut to the caps above. */
+  /** Whether any `message`, `fix` or `details` was cut to the caps above. */
   truncated: boolean;
   /** With `--diff`: new and resolved findings, and how many stayed; pass and ignored findings left out. */
   diff?: { new: AgentFinding[]; resolved: AgentFinding[]; unchanged: number };
@@ -56,19 +73,15 @@ const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 }
 // `target` runs before every module, so it sorts first.
 const moduleRank = (module: string): number => (module === 'target' ? -1 : MODULE_IDS.indexOf(module as ModuleId));
 
-/** Caps arrays and strings, at any depth, and reports whether it cut anything. */
+/** Caps arrays and strings, at any depth, strips unsafe characters from strings and keys, and reports whether it cut anything. */
 function cap(value: unknown, cut: { truncated: boolean }): unknown {
-  if (typeof value === 'string') {
-    if (value.length <= MAX_DETAIL_CHARS) return value;
-    cut.truncated = true;
-    return value.slice(0, MAX_DETAIL_CHARS);
-  }
+  if (typeof value === 'string') return capText(value, MAX_DETAIL_CHARS, cut);
   if (Array.isArray(value)) {
     if (value.length > MAX_DETAIL_ITEMS) cut.truncated = true;
     return value.slice(0, MAX_DETAIL_ITEMS).map((v) => cap(v, cut));
   }
   if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, cap(v, cut)]));
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [clean(k), cap(v, cut)]));
   }
   return value;
 }
@@ -79,9 +92,9 @@ function toAgentFinding(f: AuditFinding, module: string, cut: { truncated: boole
     severity: f.severity as AgentFinding['severity'],
     category: f.category,
     module,
-    message: f.message,
-    url: f.url ?? null,
-    fix: f.suggestion ? f.suggestion : null,
+    message: capText(f.message, MAX_TEXT_CHARS, cut),
+    url: f.url === undefined ? null : clean(f.url),
+    fix: f.suggestion ? capText(f.suggestion, MAX_TEXT_CHARS, cut) : null,
     ...(f.details && Object.keys(f.details).length > 0 && { details: cap(f.details, cut) as Record<string, unknown> }),
   };
 }
@@ -123,8 +136,8 @@ export function buildAgentReport(
   const result: AgentReport = {
     tool: 'vercel-seo-audit',
     version: opts.version,
-    url: report.url,
-    finalUrl: report.page?.finalUrl ?? null,
+    url: clean(report.url),
+    finalUrl: report.page?.finalUrl ? clean(report.page.finalUrl) : null,
     exitCode: opts.exitCode,
     summary: { errors: report.summary.errors, warnings: report.summary.warnings, info: report.summary.info },
     findings,
