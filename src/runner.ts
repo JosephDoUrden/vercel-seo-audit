@@ -32,6 +32,7 @@ import {
   auditStreamedMetadata,
   auditHostLeak,
   auditUaParity,
+  auditSoft404,
 } from './audit/index.js';
 
 type AuditModule = {
@@ -44,7 +45,7 @@ type AuditModule = {
 };
 
 // Phases run one after another; the modules inside a phase run in parallel.
-// Phase 1 fills ctx.robotsTxt for sitemap, phase 2 fills ctx.sitemapUrls for crawl.
+// Phase 1 fills ctx.robotsTxt for sitemap, phase 2 fills ctx.sitemapUrls for soft404 and crawl.
 export const phases: readonly (readonly AuditModule[])[] = [
   [
     { name: 'robots', run: auditRobots },
@@ -65,7 +66,10 @@ export const phases: readonly (readonly AuditModule[])[] = [
     { name: 'hostLeak', run: auditHostLeak, html: true },
     { name: 'uaParity', run: auditUaParity, html: true },
   ],
-  [{ name: 'crawl', run: auditCrawl, deps: ['sitemap'] }],
+  [
+    { name: 'soft404', run: auditSoft404, deps: ['sitemap'], html: true },
+    { name: 'crawl', run: auditCrawl, deps: ['sitemap'] },
+  ],
 ];
 
 const registry = new Map<ModuleId, AuditModule>(phases.flat().map((m) => [m.name, m]));
@@ -99,6 +103,7 @@ const MODULE_CATEGORY: Record<ModuleId, IssueCategory> = {
   streamedMetadata: 'nextjs',
   hostLeak: 'metadata',
   uaParity: 'indexing',
+  soft404: 'indexing',
   crawl: 'crawl',
 };
 
