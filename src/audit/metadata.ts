@@ -42,7 +42,7 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
       code: 'NOINDEX_DETECTED',
       severity: 'error',
       category: 'indexing',
-      message: 'noindex meta tag detected on homepage',
+      message: 'noindex meta tag detected on the audited page',
       explanation:
         'A noindex directive tells search engines not to include this page in search results.',
       suggestion:
@@ -75,7 +75,7 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
       code: 'CANONICAL_MISSING',
       severity: 'warning',
       category: 'metadata',
-      message: 'No canonical URL found on homepage',
+      message: 'No canonical URL found on the audited page',
       explanation:
         'Without a canonical tag, search engines may index duplicate versions of your page.',
       suggestion:

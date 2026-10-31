@@ -25,4 +25,13 @@ describe('getExitCode', () => {
   it('returns 0 when no errors or warnings and strict is true', () => {
     expect(getExitCode({ errors: 0, warnings: 0 }, true)).toBe(0);
   });
+
+  it('returns 2 when the target could not be fetched, whatever the counts say', () => {
+    expect(getExitCode({ errors: 1, warnings: 0 }, false, false)).toBe(2);
+    expect(getExitCode({ errors: 0, warnings: 0 }, true, false)).toBe(2);
+  });
+
+  it('returns the usual code when the target was fetched', () => {
+    expect(getExitCode({ errors: 1, warnings: 0 }, false, true)).toBe(1);
+  });
 });

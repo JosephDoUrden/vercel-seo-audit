@@ -101,7 +101,7 @@ function render(key, md, cut, note) {
 }
 
 /** @param {string} key */
-const crashBody = (key) => `${marker(key)}\n**vercel-seo-audit:** the audit failed to run (exit code 2), see the job log.\n`;
+const crashBody = (key) => `${marker(key)}\n**vercel-seo-audit:** the audit failed to run (exit code 2): the site could not be reached, or the input was invalid. See the job log.\n`;
 
 /**
  * report.md from the working directory, only when the audit step handed it

@@ -223,8 +223,8 @@ program
         }
       }
 
-      // Exit code based on findings
-      const code = getExitCode(auditReport.summary, strict ?? false);
+      // Exit code based on findings; 2 when the page could not be fetched at all
+      const code = getExitCode(auditReport.summary, strict ?? false, auditReport.page?.status !== null);
       if (code !== 0 && strict && auditReport.summary.warnings > 0) {
         console.error('Warnings found in strict mode');
       }

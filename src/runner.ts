@@ -34,6 +34,8 @@ type AuditModule = {
   run: (ctx: AuditContext) => Promise<AuditFinding[]>;
   /** Modules whose context this one reads; they are added when this one is selected. */
   deps?: readonly ModuleId[];
+  /** Reads the page as HTML, so it is skipped when the page is not HTML. */
+  html?: boolean;
 };
 
 // Phases run one after another; the modules inside a phase run in parallel.
@@ -45,16 +47,16 @@ export const phases: readonly (readonly AuditModule[])[] = [
   ],
   [
     { name: 'sitemap', run: auditSitemap, deps: ['robots'] },
-    { name: 'metadata', run: auditMetadata },
-    { name: 'favicon', run: auditFavicon },
+    { name: 'metadata', run: auditMetadata, html: true },
+    { name: 'favicon', run: auditFavicon, html: true },
     { name: 'nextjs', run: auditNextjs },
-    { name: 'structuredData', run: auditStructuredData },
-    { name: 'i18n', run: auditI18n },
-    { name: 'images', run: auditImages },
+    { name: 'structuredData', run: auditStructuredData, html: true },
+    { name: 'i18n', run: auditI18n, html: true },
+    { name: 'images', run: auditImages, html: true },
     { name: 'security', run: auditSecurity },
-    { name: 'performance', run: auditPerformance },
+    { name: 'performance', run: auditPerformance, html: true },
     { name: 'vercel', run: auditVercel },
-    { name: 'streamedMetadata', run: auditStreamedMetadata },
+    { name: 'streamedMetadata', run: auditStreamedMetadata, html: true },
   ],
   [{ name: 'crawl', run: auditCrawl, deps: ['sitemap'] }],
 ];
@@ -92,6 +94,64 @@ async function runModules(
     .map((r) => r.value);
 }
 
+/** The error's message, with its cause's when fetch wraps one (`fetch failed: getaddrinfo ENOTFOUND ...`). */
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = err.cause instanceof Error ? err.cause.message : undefined;
+  return cause && cause !== err.message ? `${err.message}: ${cause}` : err.message;
+}
+
+// A response without a content-type is read as HTML, the way browsers sniff it.
+function isHtmlType(contentType: string | null): boolean {
+  if (!contentType) return true;
+  const type = contentType.split(';')[0].trim().toLowerCase();
+  return type === 'text/html' || type === 'application/xhtml+xml';
+}
+
+function unreachable(url: string, error: string): AuditFinding {
+  return {
+    code: 'TARGET_UNREACHABLE',
+    severity: 'error',
+    category: 'indexing',
+    message: `Could not fetch ${url}: ${error}`,
+    explanation:
+      'The page did not answer, so nothing else was audited. A search engine that hits the same failure cannot crawl it either.',
+    suggestion:
+      'Check the URL, its DNS record and TLS certificate, and that the site is up. If it is only slow, raise --timeout.',
+    details: { error },
+    url,
+  };
+}
+
+function httpError(url: string, status: number, finalUrl: string): AuditFinding {
+  return {
+    code: 'TARGET_HTTP_ERROR',
+    severity: 'error',
+    category: 'indexing',
+    message: `The audited page returned HTTP ${status}`,
+    explanation:
+      'Search engines drop pages that answer with a 4xx or 5xx status. The other checks still ran, against what the server returned to them.',
+    suggestion: 'Check that this is the URL you meant to audit, then fix the page or the server error.',
+    details: { status, finalUrl },
+    url,
+  };
+}
+
+function notHtml(url: string, contentType: string | null, body: string): AuditFinding {
+  const empty = isHtmlType(contentType);
+  return {
+    code: 'TARGET_NOT_HTML',
+    severity: 'warning',
+    category: 'indexing',
+    message: empty ? 'The audited page returned an empty body' : `The audited page is ${contentType}, not HTML`,
+    explanation:
+      'The checks that read the page as HTML (metadata, favicon, structured data, hreflang, images, performance and streamed metadata) were skipped. The robots.txt, redirect, sitemap and header checks still ran.',
+    suggestion: 'Audit an HTML page, usually the site root.',
+    details: { contentType, bytes: Buffer.byteLength(body, 'utf-8') },
+    url,
+  };
+}
+
 export async function runAudit(
   url: string,
   opts: {
@@ -123,24 +183,33 @@ export async function runAudit(
     crawlLimit: opts.crawl,
   };
 
-  // Phase 0: fetch the page once and share it. A failed or non-2xx fetch is
-  // not shared and is dropped from the cache, so the modules try again for
-  // themselves and report what they can.
+  // Phase 0: fetch the page once and share it. A non-2xx page is reported, but
+  // not shared, and is dropped from the cache, so the modules try again for
+  // themselves and report what they can. A page that cannot be fetched at all
+  // stops the audit: every module would only report the same dead host.
   const pageFacts: PageFacts = { status: null, finalUrl: null, nextjs: false };
+  const targetFindings: AuditFinding[] = [];
+  let reached = false;
+  let isHtml = true;
   try {
     const page = await fetchPage(normalized, fetchOptions);
+    reached = true;
     pageFacts.status = page.status;
     pageFacts.finalUrl = page.finalUrl;
     pageFacts.nextjs = isNextjsPage(Object.fromEntries(page.headers.entries()), page.body);
     if (page.status >= 200 && page.status < 300) {
-      ctx.html = page.body;
+      const contentType = page.headers.get('content-type');
+      isHtml = isHtmlType(contentType) && page.body.trim() !== '';
+      if (isHtml) ctx.html = page.body;
+      else targetFindings.push(notHtml(normalized, contentType, page.body));
       ctx.headers = Object.fromEntries(page.headers.entries());
       ctx.finalUrl = page.finalUrl;
     } else {
+      if (page.status >= 400) targetFindings.push(httpError(normalized, page.status, page.finalUrl));
       fetchOptions.cache?.clear();
     }
-  } catch {
-    // Left unset on purpose
+  } catch (err) {
+    targetFindings.push(unreachable(normalized, describeError(err)));
   }
 
   // Phases 1-3. Crawl runs when --crawl is set, or when it is named in only.
@@ -152,8 +221,9 @@ export async function runAudit(
   }
 
   let allModules: AuditModuleResult[] = [];
-  for (const phase of phases) {
-    const modules = phase.filter((m) => selected.has(m.name));
+  if (targetFindings.length > 0) allModules.push({ module: 'target', findings: targetFindings });
+  for (const phase of reached ? phases : []) {
+    const modules = phase.filter((m) => selected.has(m.name) && (isHtml || !m.html));
     if (modules.length > 0) {
       allModules.push(...(await runModules(modules, ctx)));
     }

@@ -213,9 +213,21 @@ A limited run says so: the text, Markdown and HTML reports print a `Modules:` li
 
 ## What it checks
 
+### The audited page
+
+The page is fetched once before any module runs.
+
+* Not reachable at all (DNS, TLS, refused connection, timeout): one `TARGET_UNREACHABLE` error
+  with the underlying message in `details.error`. No module runs, and the CLI exits with `2`
+* A 4xx or 5xx status: `TARGET_HTTP_ERROR` (error, `details.status`). The modules still run
+* A 2xx response that is not HTML (`content-type` other than `text/html` or
+  `application/xhtml+xml`) or has an empty body: `TARGET_NOT_HTML` (warning). The modules that
+  read HTML are skipped; `robots`, `redirects`, `sitemap`, `nextjs`, `security`, `vercel` and
+  `crawl` still run. A response without a `content-type` is read as HTML
+
 ### Redirects
 
-* Redirect chains & loops (homepage + common pages)
+* Redirect chains & loops (audited page + common pages)
 * HTTP → HTTPS redirect
 * Trailing slash: whether the other form of the URL redirects, and with which status (Next.js uses a 308)
 * Meta refresh redirects (`<meta http-equiv="refresh">`)
@@ -371,11 +383,14 @@ Findings are categorised by severity:
 
 Exit codes:
 
-| Code | Meaning                                    |
-| ---- | ------------------------------------------ |
-| `0`  | No errors found (warnings/info don't fail) |
-| `1`  | One or more errors found                   |
-| `2`  | Crash / invalid input                      |
+| Code | Meaning                                                              |
+| ---- | -------------------------------------------------------------------- |
+| `0`  | No errors found (warnings/info don't fail)                           |
+| `1`  | One or more errors found                                             |
+| `2`  | Crash, invalid input, or the audited page could not be fetched at all |
+
+On a `TARGET_UNREACHABLE` run the report is still printed (and `--json` is still valid JSON),
+with that one finding; the exit code is `2` even when the code is ignored, since nothing was audited.
 
 ---
 
@@ -430,7 +445,7 @@ The summary and the comment are built from `report.md`. When `report` is unset a
 
 The comment is one collapsible block whose first line is a hidden `<!-- vercel-seo-audit:default -->` marker. A rerun edits its own earlier comment instead of adding another: one that starts with the marker and was written by the same account (`github-actions[bot]` for the default token, or the owner of a personal access token). Comments by anyone else are never touched. If several workflows or matrix jobs comment on the same pull request, give each its own `comment-key` so they do not overwrite each other.
 
-The job summary has the full report (up to GitHub's 1 MiB limit). The comment is cut at 60,000 characters, with a note saying the full report is in the job summary. The comment step runs after a failing audit too, and a failure there never changes the audit's exit code. If the audit crashes (exit code `2`), an earlier comment is replaced with a note that the audit failed to run, so it does not keep showing the last run's numbers.
+The job summary has the full report (up to GitHub's 1 MiB limit). The comment is cut at 60,000 characters, with a note saying the full report is in the job summary. The comment step runs after a failing audit too, and a failure there never changes the audit's exit code. If the audit crashes or cannot reach the site (exit code `2`), an earlier comment is replaced with a note that the audit failed to run, so it does not keep showing the last run's numbers.
 
 ```yaml
 name: SEO Audit

@@ -37,6 +37,10 @@ export const ISSUE_CODES = [
   'TRAILING_SLASH_REDIRECT',
   'META_REFRESH_REDIRECT',
   'COMMON_PAGE_REDIRECT',
+  // Target issues: the audited page itself
+  'TARGET_UNREACHABLE',
+  'TARGET_HTTP_ERROR',
+  'TARGET_NOT_HTML',
   // Indexing issues
   'NOINDEX_DETECTED',
   'X_ROBOTS_NOINDEX',
