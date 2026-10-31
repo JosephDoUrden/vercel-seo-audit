@@ -141,6 +141,8 @@ export const ISSUE_CODES = [
   'RENDER_BLOCKING_SCRIPT',
   'LARGE_INLINE_STYLE',
   'MISSING_PRECONNECT',
+  'HTML_PAST_GOOGLEBOT_LIMIT',
+  'HTML_RSC_PAYLOAD_HEAVY',
   // Vercel platform issues
   'NOT_ON_VERCEL',
   'VERCEL_CACHE_MISS',
@@ -257,6 +259,8 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   RENDER_BLOCKING_SCRIPT: 'Scripts in <head> have neither async nor defer, so they block the first render.',
   LARGE_INLINE_STYLE: 'An inline <style> block is over 50 KB, which bloats every HTML response.',
   MISSING_PRECONNECT: 'The page loads from third-party origins without a <link rel="preconnect"> for them.',
+  HTML_PAST_GOOGLEBOT_LIMIT: 'The title, meta description, canonical, robots meta, first JSON-LD block or <h1> starts past the first 2 MB of the HTML, which Googlebot does not read.',
+  HTML_RSC_PAYLOAD_HEAVY: 'Next.js flight data (self.__next_f.push scripts) is over half of an HTML document larger than 500 KB.',
   NOT_ON_VERCEL: 'No Vercel signal was found in the response headers, so the Vercel checks were skipped.',
   VERCEL_CACHE_MISS: 'The Vercel CDN did not serve the page from its cache (x-vercel-cache: MISS).',
   VERCEL_CACHE_STALE: 'The Vercel CDN served a stale copy while it refreshed the page (x-vercel-cache: STALE).',

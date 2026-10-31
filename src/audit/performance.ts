@@ -1,9 +1,24 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchPage } from '../utils/http.js';
 import { getHeadScripts } from '../utils/html-parser.js';
+import { GOOGLEBOT_HTML_LIMIT_BYTES } from '../constants.js';
 
 const KB = 1024;
 const MB = 1024 * KB;
+
+// The elements Search reads its title, snippet, canonical, indexing rules, rich results and
+// heading from. Each pattern finds the element's first start tag in the raw HTML.
+const INDEXED_ELEMENTS: readonly (readonly [string, RegExp])[] = [
+  ['<title>', /<title[\s>]/i],
+  ['meta description', /<meta\b[^>]*\bname\s*=\s*["']?description\b/i],
+  ['canonical <link>', /<link\b[^>]*\brel\s*=\s*["']?canonical\b/i],
+  ['robots meta', /<meta\b[^>]*\bname\s*=\s*["']?robots\b/i],
+  ['JSON-LD', /<script\b[^>]*\btype\s*=\s*["']?application\/ld\+json/i],
+  ['<h1>', /<h1[\s>]/i],
+];
+
+// A Next.js App Router flight-data chunk: an inline script that calls self.__next_f.push(.
+const RSC_SCRIPT = /<script\b[^>]*>\s*self\.__next_f\.push\([\s\S]*?<\/script>/gi;
 
 // JavaScript MIME type essences per the HTML spec. A <script> with any other type is a data block.
 const JAVASCRIPT_MIME_TYPES = new Set([
@@ -60,7 +75,7 @@ export async function auditPerformance(ctx: AuditContext): Promise<AuditFinding[
       category: 'performance',
       message: `HTML document is ${(htmlSize / KB).toFixed(0)} KB (exceeds 1 MB)`,
       explanation:
-        'Very large HTML documents increase Time to First Byte (TTFB) and slow down parsing, hurting Core Web Vitals and SEO rankings.',
+        'Very large HTML documents increase Time to First Byte (TTFB) and slow down parsing, hurting Core Web Vitals and SEO rankings. Googlebot reads only the first 2 MB of an HTML file and does not index the rest.',
       suggestion:
         'Reduce HTML size by deferring non-critical content, paginating long lists, or lazy-loading below-the-fold sections.',
       url: normalizedUrl,
@@ -73,12 +88,60 @@ export async function auditPerformance(ctx: AuditContext): Promise<AuditFinding[
       category: 'performance',
       message: `HTML document is ${(htmlSize / KB).toFixed(0)} KB (exceeds 500 KB)`,
       explanation:
-        'Large HTML documents can slow down initial page load and parsing, which may negatively affect Core Web Vitals.',
+        'Large HTML documents can slow down initial page load and parsing, which may negatively affect Core Web Vitals. Googlebot reads only the first 2 MB of an HTML file and does not index the rest.',
       suggestion:
         'Consider reducing HTML size by deferring non-critical content or lazy-loading below-the-fold sections.',
       url: normalizedUrl,
       details: { bytes: htmlSize },
     });
+  }
+
+  // 1b. Indexed elements Googlebot never reads. Only a page over the limit can have one, so
+  // smaller pages skip the search. Offsets are UTF-8 bytes: the regex index is a UTF-16 index,
+  // and the byte length of everything before it is where the element starts on the wire.
+  if (htmlSize > GOOGLEBOT_HTML_LIMIT_BYTES) {
+    const elements: { tag: string; offsetBytes: number }[] = [];
+    for (const [tag, pattern] of INDEXED_ELEMENTS) {
+      const index = html.search(pattern);
+      if (index === -1) continue;
+      const offsetBytes = Buffer.byteLength(html.slice(0, index), 'utf-8');
+      if (offsetBytes >= GOOGLEBOT_HTML_LIMIT_BYTES) elements.push({ tag, offsetBytes });
+    }
+    if (elements.length > 0) {
+      findings.push({
+        code: 'HTML_PAST_GOOGLEBOT_LIMIT',
+        severity: 'error',
+        category: 'performance',
+        message: `${elements.map((e) => e.tag).join(', ')} start${elements.length === 1 ? 's' : ''} past the first 2 MB of the HTML, which Googlebot does not read`,
+        explanation:
+          'Googlebot reads the first 2 MB of an HTML file, counted uncompressed, then stops the fetch and sends only that part for indexing. Anything that starts after the cut-off is not indexed.',
+        suggestion:
+          'Move these elements earlier in the document, ideally into <head>, and cut what comes before them: inline styles and scripts, serialised data and long lists.',
+        url: normalizedUrl,
+        details: { limitBytes: GOOGLEBOT_HTML_LIMIT_BYTES, elements },
+      });
+    }
+  }
+
+  // 1c. Next.js flight data (the RSC payload the App Router streams for hydration) as a share of the page.
+  if (htmlSize > 500 * KB) {
+    let rscBytes = 0;
+    for (const match of html.matchAll(RSC_SCRIPT)) rscBytes += Buffer.byteLength(match[0], 'utf-8');
+    const share = rscBytes / htmlSize;
+    if (share > 0.5) {
+      findings.push({
+        code: 'HTML_RSC_PAYLOAD_HEAVY',
+        severity: 'info',
+        category: 'performance',
+        message: `Next.js flight data (self.__next_f.push scripts) is ${Math.round(share * 100)}% of the ${(htmlSize / KB).toFixed(0)} KB HTML`,
+        explanation:
+          'The flight payload is what the App Router streams for hydration. A large share means little indexable content per byte, and it pushes <body> content towards the 2 MB Googlebot reads of an HTML file.',
+        suggestion:
+          'Pass fewer and smaller props to client components, fetch data on the client where it is not indexable content, or render the route statically.',
+        url: normalizedUrl,
+        details: { totalBytes: htmlSize, rscBytes, share: Math.round(share * 100) / 100 },
+      });
+    }
   }
 
   // 2. Render-blocking scripts in <head>: external classic scripts without async or defer.

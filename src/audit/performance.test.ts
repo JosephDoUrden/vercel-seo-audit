@@ -227,3 +227,86 @@ describe('auditPerformance', () => {
     expect(findings.every((f) => f.category === 'performance')).toBe(true);
   });
 });
+
+const LIMIT = 2 * 1024 * 1024;
+
+describe('HTML_PAST_GOOGLEBOT_LIMIT', () => {
+  const pastLimit = (html: string) =>
+    auditPerformance(makeCtx(html)).then((fs) => fs.find((f) => f.code === 'HTML_PAST_GOOGLEBOT_LIMIT'));
+  const byteOffset = (html: string, needle: string) => Buffer.byteLength(html.slice(0, html.indexOf(needle)));
+
+  it('flags a <title> that starts past the first 2 MB', async () => {
+    const head = '<html><head><style>' + 'x'.repeat(LIMIT) + '</style>';
+    const html = head + '<title>Late</title></head><body><h1>Hi</h1></body></html>';
+    const f = await pastLimit(html);
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe('error');
+    expect(f!.category).toBe('performance');
+    expect(f!.details).toEqual({
+      limitBytes: LIMIT,
+      elements: [
+        { tag: '<title>', offsetBytes: Buffer.byteLength(head) },
+        { tag: '<h1>', offsetBytes: byteOffset(html, '<h1>') },
+      ],
+    });
+  });
+
+  it('reports nothing when every element is inside the first 2 MB', async () => {
+    const html = `<html><head><title>T</title>
+      <meta name="description" content="d"><link rel="canonical" href="https://example.com/">
+      <meta name="robots" content="index"><script type="application/ld+json">{}</script>
+      </head><body><h1>Hi</h1><p>${'x'.repeat(LIMIT)}</p></body></html>`;
+    expect(await pastLimit(html)).toBeUndefined();
+  });
+
+  it('measures the offset in UTF-8 bytes, not characters', async () => {
+    // 'é' is two bytes, so the <h1> is past 2 MB by bytes but well short of it by characters.
+    const html = '<html><head><title>T</title></head><body><p>' + 'é'.repeat(LIMIT / 2 + 10) + '</p><h1>Hi</h1></body></html>';
+    expect(html.indexOf('<h1>')).toBeLessThan(LIMIT);
+    const f = await pastLimit(html);
+    expect(f!.details!.elements).toEqual([{ tag: '<h1>', offsetBytes: byteOffset(html, '<h1>') }]);
+  });
+
+  it('finds all six elements, in either attribute order and any case', async () => {
+    const html = '<html><head><style>' + 'x'.repeat(LIMIT) + `</style>
+      <TITLE>T</TITLE><meta content="d" name="description"><link href="/" rel="canonical">
+      <meta name='robots' content="index"><script type="application/ld+json">{}</script>
+      </head><body><h1 class="a">Hi</h1></body></html>`;
+    const f = await pastLimit(html);
+    expect((f!.details!.elements as { tag: string }[]).map((e) => e.tag)).toEqual([
+      '<title>', 'meta description', 'canonical <link>', 'robots meta', 'JSON-LD', '<h1>',
+    ]);
+  });
+});
+
+describe('HTML_RSC_PAYLOAD_HEAVY', () => {
+  const rscScript = (bytes: number) => `<script>self.__next_f.push([1,"${'a'.repeat(bytes)}"])</script>`;
+  const heavy = (html: string) =>
+    auditPerformance(makeCtx(html)).then((fs) => fs.find((f) => f.code === 'HTML_RSC_PAYLOAD_HEAVY'));
+
+  it('flags a page over 500 KiB where flight data is more than half the bytes', async () => {
+    const scripts = rscScript(400 * 1024) + rscScript(200 * 1024);
+    const html = `<html><head><title>T</title></head><body><p>${'x'.repeat(100 * 1024)}</p>${scripts}</body></html>`;
+    const f = await heavy(html);
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe('info');
+    const totalBytes = Buffer.byteLength(html);
+    const rscBytes = Buffer.byteLength(scripts);
+    expect(f!.details).toEqual({ totalBytes, rscBytes, share: Math.round((rscBytes / totalBytes) * 100) / 100 });
+  });
+
+  it('does not flag a page where flight data is a small share', async () => {
+    const html = `<html><body><p>${'x'.repeat(600 * 1024)}</p>${rscScript(100 * 1024)}</body></html>`;
+    expect(await heavy(html)).toBeUndefined();
+  });
+
+  it('does not flag a page under 500 KiB, whatever the share', async () => {
+    const html = `<html><body>${rscScript(100 * 1024)}</body></html>`;
+    expect(await heavy(html)).toBeUndefined();
+  });
+
+  it('does not flag a large page that is not Next.js', async () => {
+    const html = `<html><body><script>window.data = "${'a'.repeat(800 * 1024)}"</script></body></html>`;
+    expect(await heavy(html)).toBeUndefined();
+  });
+});
