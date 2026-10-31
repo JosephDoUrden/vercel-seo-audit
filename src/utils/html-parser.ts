@@ -1,13 +1,25 @@
 import * as cheerio from 'cheerio';
 
+// The last page parsed. Every module reads the audited page through several of
+// these helpers, and parsing it again for each one cost gigabytes on a large
+// page. Comparing the page with itself is a pointer check, and the parsed
+// document is only ever read, never changed.
+let last: { html: string; $: cheerio.CheerioAPI } | undefined;
+
+/** cheerio.load, remembering the last page so the same HTML is parsed once. Read-only use. */
+export function parseHtml(html: string): cheerio.CheerioAPI {
+  if (last?.html !== html) last = { html, $: cheerio.load(html) };
+  return last.$;
+}
+
 export function getCanonicalUrl(html: string): string | null {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const href = $('link[rel="canonical"]').attr('href');
   return href?.trim() || null;
 }
 
 export function getNoindexDirective(html: string): boolean {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   // Attribute selectors are case-sensitive; crawlers are not.
   return $('meta[name]')
     .toArray()
@@ -20,7 +32,7 @@ export function getNoindexDirective(html: string): boolean {
 }
 
 export function getMetaRefresh(html: string): string | null {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const content = $('meta[http-equiv="refresh"]').attr('content');
   if (!content) return null;
 
@@ -29,7 +41,7 @@ export function getMetaRefresh(html: string): string | null {
 }
 
 export function getMetaTag(html: string, name: string): string | null {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   // Check both name and property attributes (for OG tags)
   const value =
     $(`meta[name="${name}"]`).attr('content') ??
@@ -38,7 +50,7 @@ export function getMetaTag(html: string, name: string): string | null {
 }
 
 export function getCharset(html: string): string | null {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const charset = $('meta[charset]').attr('charset');
   if (charset) return charset;
 
@@ -51,12 +63,12 @@ export function getCharset(html: string): string | null {
 }
 
 export function getViewport(html: string): string | null {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   return $('meta[name="viewport"]').attr('content')?.trim() || null;
 }
 
 export function getTitle(html: string): string | null {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   return $('title').first().text().trim() || null;
 }
 
@@ -81,7 +93,7 @@ export interface MetadataLocation {
 // rather than merely not in <head>, so a missing tag is in neither set. The parser hoists
 // stray <title> and <meta> written before any content into <head>, as browsers do.
 export function locateMetadata(html: string): MetadataLocation {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const head = new Set<MetadataTag>();
   const bodyOnly = new Set<MetadataTag>();
   for (const [tag, selector] of Object.entries(METADATA_SELECTORS) as [MetadataTag, string][]) {
@@ -99,7 +111,7 @@ export interface FaviconLink {
 }
 
 export function getFaviconLinks(html: string): FaviconLink[] {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const links: FaviconLink[] = [];
 
   $('link[rel*="icon"]').each((_, el) => {
@@ -133,7 +145,7 @@ export interface ImageInfo {
 }
 
 export function getImages(html: string): ImageInfo[] {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const images: ImageInfo[] = [];
 
   $('img').each((_, el) => {
@@ -166,7 +178,7 @@ export interface HeadScript {
 }
 
 export function getHeadScripts(html: string): HeadScript[] {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const scripts: HeadScript[] = [];
   $('head script').each((_, el) => {
     scripts.push({
@@ -181,7 +193,7 @@ export function getHeadScripts(html: string): HeadScript[] {
 }
 
 export function getHreflangLinks(html: string): HreflangLink[] {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const links: HreflangLink[] = [];
   $('link[rel="alternate"][hreflang]').each((_, el) => {
     const hreflang = $(el).attr('hreflang');

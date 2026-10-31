@@ -8,8 +8,8 @@ import {
   getTitle,
   getMetaTag,
   getCanonicalUrl,
+  parseHtml,
 } from '../utils/html-parser.js';
-import * as cheerio from 'cheerio';
 
 export async function auditCrawl(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
@@ -176,7 +176,7 @@ async function auditPage(
   }
 
   // Missing JSON-LD
-  const $ = cheerio.load(body);
+  const $ = parseHtml(body);
   const jsonldScripts = $('script[type="application/ld+json"]');
   if (jsonldScripts.length === 0) {
     findings.push({
