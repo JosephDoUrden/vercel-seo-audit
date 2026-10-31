@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.13.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.12.0...vercel-seo-audit-v2.13.0) (2026-10-31)
+
+
+### Features
+
+* **audit:** compare what the page serves to different crawler user agents ([#193](https://github.com/JosephDoUrden/vercel-seo-audit/issues/193)) ([ff9dd44](https://github.com/JosephDoUrden/vercel-seo-audit/commit/ff9dd44e227485aa20273930ddcf14228720aade))
+* **audit:** probe unknown paths for soft 404s and the Next.js error shell ([#195](https://github.com/JosephDoUrden/vercel-seo-audit/issues/195)) ([f473a17](https://github.com/JosephDoUrden/vercel-seo-audit/commit/f473a1722283f2ea2132d1085efa4b14b2754232))
+
 ## [2.12.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.11.0...vercel-seo-audit-v2.12.0) (2026-10-31)
 
 
