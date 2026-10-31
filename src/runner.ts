@@ -31,6 +31,7 @@ import {
   auditVercel,
   auditStreamedMetadata,
   auditHostLeak,
+  auditUaParity,
 } from './audit/index.js';
 
 type AuditModule = {
@@ -62,6 +63,7 @@ export const phases: readonly (readonly AuditModule[])[] = [
     { name: 'vercel', run: auditVercel },
     { name: 'streamedMetadata', run: auditStreamedMetadata, html: true },
     { name: 'hostLeak', run: auditHostLeak, html: true },
+    { name: 'uaParity', run: auditUaParity, html: true },
   ],
   [{ name: 'crawl', run: auditCrawl, deps: ['sitemap'] }],
 ];
@@ -96,6 +98,7 @@ const MODULE_CATEGORY: Record<ModuleId, IssueCategory> = {
   vercel: 'vercel',
   streamedMetadata: 'nextjs',
   hostLeak: 'metadata',
+  uaParity: 'indexing',
   crawl: 'crawl',
 };
 

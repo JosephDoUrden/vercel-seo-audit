@@ -13,3 +13,4 @@ export { auditPerformance } from './performance.js';
 export { auditVercel } from './vercel.js';
 export { auditStreamedMetadata } from './streamed-metadata.js';
 export { auditHostLeak } from './hostLeak.js';
+export { auditUaParity } from './uaParity.js';

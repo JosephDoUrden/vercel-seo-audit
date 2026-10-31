@@ -147,8 +147,9 @@ describe('request count for a single-URL audit', () => {
     expect(report.modules.map((m) => m.module)).toContain('metadata');
 
     // The page itself: one GET, reused by every module and by the redirect
-    // chain and trailing-slash probes that hit the same URL.
-    expect(byPath['GET /']).toBe(1);
+    // chain and trailing-slash probes that hit the same URL, plus the three
+    // the user-agent parity check makes as other user agents.
+    expect(byPath['GET /']).toBe(4);
     // robots.txt and sitemap.xml are read once each.
     expect(byPath['GET /robots.txt']).toBe(1);
     expect(byPath['GET /sitemap.xml']).toBe(1);
@@ -157,8 +158,8 @@ describe('request count for a single-URL audit', () => {
     // Four common-page probes are separate URLs and stay.
     expect(byPath['GET /about']).toBe(1);
 
-    // 11 on a clean run; a little headroom for platform differences.
-    expect(total).toBeLessThanOrEqual(12);
+    // 14 on a clean run; a little headroom for platform differences.
+    expect(total).toBeLessThanOrEqual(15);
   });
 
   it('reports APP_ROUTER_METADATA from the shared HTML when Next.js markers are absent', async () => {
@@ -189,21 +190,22 @@ describe('request count for a single-URL audit', () => {
     expect(nextjs?.findings.find((f) => f.code === 'APP_ROUTER_METADATA')).toBeUndefined();
   });
 
-  it('asks for a streamed-metadata page once more, as an HTML-limited bot', async () => {
+  it('asks for a streamed-metadata page once more, as an HTML-limited bot, besides the parity GETs', async () => {
     const report = await runAudit(`${origin}/streamed`, { timeout: 5000 });
     const finding = report.modules
       .find((m) => m.module === 'streamedMetadata')
       ?.findings.find((f) => f.code === 'METADATA_STREAMED_TO_BODY');
 
-    expect(byPathNow()['GET /streamed']).toBe(2);
+    // The page, the bot probe and the three user-agent parity GETs.
+    expect(byPathNow()['GET /streamed']).toBe(5);
     expect(finding).toMatchObject({ severity: 'info', details: { botRequest: 'ok' } });
   });
 
-  it('makes at most two extra GETs for the page: the Vercel recheck and the bot probe', async () => {
+  it('makes at most five extra GETs for the page: the Vercel recheck, the bot probe and the parity check', async () => {
     const report = await runAudit(`${origin}/streamed-vercel`, { timeout: 5000 });
     const codes = report.modules.flatMap((m) => m.findings.map((f) => f.code));
 
-    expect(byPathNow()['GET /streamed-vercel']).toBe(3);
+    expect(byPathNow()['GET /streamed-vercel']).toBe(6);
     expect(codes).toContain('VERCEL_CACHE_MISS');
     expect(codes).toContain('METADATA_STREAMED_TO_BODY');
   });

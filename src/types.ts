@@ -171,6 +171,11 @@ export const ISSUE_CODES = [
   // Which AI crawlers robots.txt lets in
   'AI_CRAWLER_ACCESS',
   'AI_SEARCH_BOT_BLOCKED',
+  // What the page serves to different crawler user agents
+  'UA_STATUS_DIFFERS',
+  'UA_METADATA_DIFFERS',
+  'UA_CACHE_DIFFERS',
+  'UA_SIZE_DIFFERS',
 ] as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[number];
@@ -293,6 +298,10 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   SITEMAP_INDEX_NESTED: 'A sitemap index lists other sitemap index files, which Google does not follow.',
   AI_CRAWLER_ACCESS: 'Which AI training, search and user-fetch crawlers robots.txt lets fetch the site root.',
   AI_SEARCH_BOT_BLOCKED: 'robots.txt blocks an AI search crawler while it allows Googlebot, so the site drops out of AI search answers.',
+  UA_STATUS_DIFFERS: 'The audited page answers 2xx to the default user agent but a 4xx or 5xx to Googlebot, an HTML-limited bot or another crawler.',
+  UA_METADATA_DIFFERS: 'The title, canonical or robots directives change with the user agent, a bug and a cloaking risk.',
+  UA_CACHE_DIFFERS: 'Some user agents get a private or no-store cache-control and others do not, as Next.js 16.3 does for htmlLimitedBots.',
+  UA_SIZE_DIFFERS: 'The page is more than 30% bigger or smaller for one user agent than for another.',
 };
 
 export interface AuditFinding {
@@ -331,6 +340,7 @@ export const MODULE_IDS = [
   'vercel',
   'streamedMetadata',
   'hostLeak',
+  'uaParity',
   'crawl',
 ] as const;
 
