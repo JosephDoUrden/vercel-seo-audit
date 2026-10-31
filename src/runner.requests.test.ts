@@ -158,8 +158,12 @@ describe('request count for a single-URL audit', () => {
     // Four common-page probes are separate URLs and stay.
     expect(byPath['GET /about']).toBe(1);
 
-    // 14 on a clean run; a little headroom for platform differences.
-    expect(total).toBeLessThanOrEqual(15);
+    // One soft-404 probe: the random path answers 404 and the sitemap has no dynamic route.
+    const probes = Object.entries(byPath).filter(([key]) => /^GET \/[0-9a-f]{32}$/.test(key));
+    expect(probes).toEqual([[expect.any(String), 1]]);
+
+    // 15 on a clean run; a little headroom for platform differences.
+    expect(total).toBeLessThanOrEqual(16);
   });
 
   it('reports APP_ROUTER_METADATA from the shared HTML when Next.js markers are absent', async () => {

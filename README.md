@@ -12,7 +12,7 @@ A CLI that explains **why Google isn't indexing your Next.js site**, from what t
 * **Preview deployments left indexable.** A `*.vercel.app` URL served without `x-robots-tag: noindex` or a robots meta `noindex` (`VERCEL_PREVIEW_INDEXABLE`): an error on branch URLs, which are always previews, and a warning on other generated URLs, which may be production.
 * **Metadata streamed into `<body>`.** Next.js 15.2 and later stream dynamic `generateMetadata` output into `<body>` for every user agent not on their HTML-limited bot list, so a crawler that reads only `<head>` and does not run JavaScript sees no title, description or canonical. The page is fetched once more as a bot on that list to confirm (`METADATA_STREAMED_TO_BODY`, `METADATA_NOT_IN_HEAD`, `METADATA_IN_HEAD`).
 
-Beyond those, the audit covers redirect chains and loops, the trailing-slash 308, robots.txt (including rules that keep Googlebot from the page's scripts and stylesheets, `ROBOTS_BLOCKS_RENDER_ASSETS`), the sitemap, `noindex` headers, canonical mismatches, Open Graph, favicons, JSON-LD, hreflang, images, security headers, performance hints, Vercel CDN cache headers and Vercel or Cloudflare challenge pages on the page, robots.txt or the sitemap (`EDGE_CHALLENGE`), canonical, social card, hreflang and JSON-LD URLs that point at localhost or a `vercel.app` host (`URL_HOST_LOCALHOST`, `URL_HOST_VERCEL_APP`, `URL_HOST_MISMATCH`), pages that answer Googlebot, an HTML-limited bot or another crawler differently from the default user agent (`UA_STATUS_DIFFERS`, `UA_METADATA_DIFFERS`, `UA_CACHE_DIFFERS`, `UA_SIZE_DIFFERS`), with `--crawl` to run the page checks over every sitemap URL. The 16 modules are listed under [Running some modules only](#running-some-modules-only).
+Beyond those, the audit covers redirect chains and loops, the trailing-slash 308, robots.txt (including rules that keep Googlebot from the page's scripts and stylesheets, `ROBOTS_BLOCKS_RENDER_ASSETS`), the sitemap, `noindex` headers, canonical mismatches, Open Graph, favicons, JSON-LD, hreflang, images, security headers, performance hints, Vercel CDN cache headers and Vercel or Cloudflare challenge pages on the page, robots.txt or the sitemap (`EDGE_CHALLENGE`), canonical, social card, hreflang and JSON-LD URLs that point at localhost or a `vercel.app` host (`URL_HOST_LOCALHOST`, `URL_HOST_VERCEL_APP`, `URL_HOST_MISMATCH`), pages that answer Googlebot, an HTML-limited bot or another crawler differently from the default user agent (`UA_STATUS_DIFFERS`, `UA_METADATA_DIFFERS`, `UA_CACHE_DIFFERS`, `UA_SIZE_DIFFERS`), unknown paths that answer 200 or redirect instead of 404 (`SOFT_404`, `NEXTJS_ERROR_SHELL`), with `--crawl` to run the page checks over every sitemap URL. The 17 modules are listed under [Running some modules only](#running-some-modules-only).
 
 ---
 
@@ -228,6 +228,7 @@ Ignored findings do not count towards the summary or the exit code. The text rep
 | `streamedMetadata` | Metadata streamed into `<body>` by Next.js 15.2+ |
 | `hostLeak` | Canonical, social card, hreflang and JSON-LD URLs on localhost or a vercel.app host |
 | `uaParity` | What the page serves to Googlebot, an HTML-limited bot and another crawler, against the default user agent |
+| `soft404` | What a path that does not exist answers: 404, a 200, a redirect or the Next.js error shell; adds `robots` and `sitemap` |
 | `crawl` | Sitemap URLs up to the `--crawl` limit (default 50); adds `robots` and `sitemap` |
 
 A module that reads another one's results brings it along: `--only sitemap` also runs `robots`, so the robots.txt cross-check still happens, and `--only crawl` runs `robots` and `sitemap` first. `--only` without `crawl` turns crawling off even if `--crawl` is set (a warning says so); naming `crawl` turns it on, with the `--crawl` limit or the default of 50. Ids match exactly, case included, and an unknown one stops the run with exit code `2`.
@@ -339,6 +340,29 @@ private address is not caught.
 * Missing `loading="lazy"` on below-fold images
 * Oversized images (> 200 KB via HEAD request)
 * Missing `width`/`height` attributes (causes layout shift)
+
+### Unknown paths (soft 404)
+
+Up to three GETs for paths that cannot exist, under the origin the audited page settled on:
+a random 32-character hex path, a random slug under the parent path the sitemap uses most
+(`/blog/<slug>` when it lists `/blog/a` and `/blog/b`), and, only when both of those answer
+200, a random `.html` name to tell a catch-all rewrite apart. Skipped when the audited page
+did not answer 2xx HTML.
+
+* 404 or any other 4xx: `SOFT_404_NONE` (pass), with every probe in `details.probes`
+* 200 with a robots `noindex` meta or `X-Robots-Tag`: `SOFT_404_NOINDEX` (info). This is the
+  App Router calling `notFound()` after streaming has started: the 200 has already been sent,
+  so Next.js renders the not-found UI with `noindex` instead
+  ([discussion #100192](https://github.com/vercel/next.js/discussions/100192)). Google will
+  not index it, but still fetches it
+* 200 without `noindex`: `SOFT_404` (error), with `details.title` and `details.looksLikeErrorPage`
+* 200 with the empty Next.js error document (`<html id="__next_error__">`, or a bare `__next`
+  root and no `<title>`): `NEXTJS_ERROR_SHELL` (error); see
+  [issue #99287](https://github.com/vercel/next.js/issues/99287)
+* A redirect to another page: `SOFT_404_REDIRECT` (warning). Google asks sites not to
+  redirect to the home page in place of a 404. A hop that only adds a trailing slash or
+  ends in a 404 does not count
+* 5xx: `SOFT_404_SERVER_ERROR` (warning)
 
 ### Crawl Mode (`--crawl`)
 

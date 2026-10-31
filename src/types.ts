@@ -176,6 +176,13 @@ export const ISSUE_CODES = [
   'UA_METADATA_DIFFERS',
   'UA_CACHE_DIFFERS',
   'UA_SIZE_DIFFERS',
+  // What the site answers for a path that does not exist
+  'SOFT_404',
+  'SOFT_404_NOINDEX',
+  'SOFT_404_REDIRECT',
+  'SOFT_404_SERVER_ERROR',
+  'SOFT_404_NONE',
+  'NEXTJS_ERROR_SHELL',
 ] as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[number];
@@ -302,6 +309,12 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   UA_METADATA_DIFFERS: 'The title, canonical or robots directives change with the user agent, a bug and a cloaking risk.',
   UA_CACHE_DIFFERS: 'Some user agents get a private or no-store cache-control and others do not, as Next.js 16.3 does for htmlLimitedBots.',
   UA_SIZE_DIFFERS: 'The page is more than 30% bigger or smaller for one user agent than for another.',
+  SOFT_404: 'A path that does not exist answers 200 without noindex, which Google reports as a soft 404.',
+  SOFT_404_NOINDEX: 'A path that does not exist answers 200 with noindex, what Next.js does when notFound() runs after streaming has started.',
+  SOFT_404_REDIRECT: 'A path that does not exist redirects to another page, which Google treats as a soft 404.',
+  SOFT_404_SERVER_ERROR: 'A path that does not exist makes the server answer 5xx instead of 404.',
+  SOFT_404_NONE: 'Paths that do not exist answer 404 or 410, which is what they should do.',
+  NEXTJS_ERROR_SHELL: 'A path that does not exist answers 200 with the empty Next.js error document, which has no title or content.',
 };
 
 export interface AuditFinding {
@@ -341,6 +354,7 @@ export const MODULE_IDS = [
   'streamedMetadata',
   'hostLeak',
   'uaParity',
+  'soft404',
   'crawl',
 ] as const;
 

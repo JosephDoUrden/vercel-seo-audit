@@ -24,6 +24,7 @@ vi.mock('./audit/index.js', () => ({
   auditStreamedMetadata: vi.fn(),
   auditHostLeak: vi.fn(),
   auditUaParity: vi.fn(),
+  auditSoft404: vi.fn(),
 }));
 
 import { fetchPage, RedirectError } from './utils/http.js';
@@ -44,6 +45,7 @@ import {
   auditStreamedMetadata,
   auditHostLeak,
   auditUaParity,
+  auditSoft404,
 } from './audit/index.js';
 
 const mockFetchPage = vi.mocked(fetchPage);
@@ -63,6 +65,7 @@ const mockVercel = vi.mocked(auditVercel);
 const mockStreamedMetadata = vi.mocked(auditStreamedMetadata);
 const mockHostLeak = vi.mocked(auditHostLeak);
 const mockUaParity = vi.mocked(auditUaParity);
+const mockSoft404 = vi.mocked(auditSoft404);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -91,6 +94,7 @@ beforeEach(() => {
   mockStreamedMetadata.mockResolvedValue([]);
   mockHostLeak.mockResolvedValue([]);
   mockUaParity.mockResolvedValue([]);
+  mockSoft404.mockResolvedValue([]);
 });
 
 describe('runAudit', () => {
@@ -127,6 +131,18 @@ describe('runAudit', () => {
     expect(mockStreamedMetadata).toHaveBeenCalledTimes(1);
     expect(mockHostLeak).toHaveBeenCalledTimes(1);
     expect(mockUaParity).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs soft404 after sitemap, with the sitemap URLs in the context', async () => {
+    mockSitemap.mockImplementation(async (ctx) => {
+      ctx.sitemapUrls = ['https://example.com/blog/a', 'https://example.com/blog/b'];
+      return [];
+    });
+
+    await runAudit('https://example.com');
+
+    expect(mockSoft404).toHaveBeenCalledTimes(1);
+    expect(mockSoft404.mock.calls[0][0].sitemapUrls).toEqual(['https://example.com/blog/a', 'https://example.com/blog/b']);
   });
 
   it('does not run crawl module when crawl option is not set', async () => {
@@ -712,6 +728,7 @@ describe('runAudit with only', () => {
     streamedMetadata: mockStreamedMetadata,
     hostLeak: mockHostLeak,
     uaParity: mockUaParity,
+    soft404: mockSoft404,
     crawl: mockCrawl,
   });
 
