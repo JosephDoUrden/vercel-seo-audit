@@ -22,6 +22,7 @@ vi.mock('./audit/index.js', () => ({
   auditPerformance: vi.fn(),
   auditVercel: vi.fn(),
   auditStreamedMetadata: vi.fn(),
+  auditHostLeak: vi.fn(),
 }));
 
 import { fetchPage, RedirectError } from './utils/http.js';
@@ -40,6 +41,7 @@ import {
   auditPerformance,
   auditVercel,
   auditStreamedMetadata,
+  auditHostLeak,
 } from './audit/index.js';
 
 const mockFetchPage = vi.mocked(fetchPage);
@@ -57,6 +59,7 @@ const mockSecurity = vi.mocked(auditSecurity);
 const mockPerformance = vi.mocked(auditPerformance);
 const mockVercel = vi.mocked(auditVercel);
 const mockStreamedMetadata = vi.mocked(auditStreamedMetadata);
+const mockHostLeak = vi.mocked(auditHostLeak);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -83,6 +86,7 @@ beforeEach(() => {
   mockPerformance.mockResolvedValue([]);
   mockVercel.mockResolvedValue([]);
   mockStreamedMetadata.mockResolvedValue([]);
+  mockHostLeak.mockResolvedValue([]);
 });
 
 describe('runAudit', () => {
@@ -103,7 +107,7 @@ describe('runAudit', () => {
     expect(mockRedirects).toHaveBeenCalledTimes(1);
   });
 
-  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security, performance, vercel, streamedMetadata)', async () => {
+  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security, performance, vercel, streamedMetadata, hostLeak)', async () => {
     await runAudit('https://example.com');
 
     expect(mockSitemap).toHaveBeenCalledTimes(1);
@@ -117,6 +121,7 @@ describe('runAudit', () => {
     expect(mockPerformance).toHaveBeenCalledTimes(1);
     expect(mockVercel).toHaveBeenCalledTimes(1);
     expect(mockStreamedMetadata).toHaveBeenCalledTimes(1);
+    expect(mockHostLeak).toHaveBeenCalledTimes(1);
   });
 
   it('does not run crawl module when crawl option is not set', async () => {
@@ -700,6 +705,7 @@ describe('runAudit with only', () => {
     performance: mockPerformance,
     vercel: mockVercel,
     streamedMetadata: mockStreamedMetadata,
+    hostLeak: mockHostLeak,
     crawl: mockCrawl,
   });
 

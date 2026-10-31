@@ -143,6 +143,10 @@ export const ISSUE_CODES = [
   // robots.txt rules that block what the page loads
   'ROBOTS_BLOCKS_RENDER_ASSETS',
   'ROBOTS_BLOCKS_NEXT_IMAGE',
+  // Page URLs that point at a host other than the audited site
+  'URL_HOST_LOCALHOST',
+  'URL_HOST_VERCEL_APP',
+  'URL_HOST_MISMATCH',
 ] as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[number];
@@ -182,6 +186,7 @@ export const MODULE_IDS = [
   'performance',
   'vercel',
   'streamedMetadata',
+  'hostLeak',
   'crawl',
 ] as const;
 
