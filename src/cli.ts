@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { Command } from 'commander';
 import { runAudit } from './runner.js';
 import { formatReport, formatJson, formatMarkdown, formatHtml, formatDiff, formatDiffJson, formatFixes } from './utils/output.js';
-import { getExitCode } from './exitCode.js';
+import { getExitCode, usageExitCode } from './exitCode.js';
 import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { loadConfig } from './utils/config.js';
 import { resolveIgnore } from './utils/ignore.js';
@@ -253,6 +253,9 @@ program
       process.exit(2);
     }
   });
+
+// Before the subcommand, so explain inherits it.
+program.exitOverride((err) => process.exit(usageExitCode(err.exitCode)));
 
 program
   .command('explain')

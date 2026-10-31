@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getExitCode } from './exitCode.js';
+import { getExitCode, usageExitCode } from './exitCode.js';
 
 describe('getExitCode', () => {
   it('returns 1 when errors > 0 and strict is false', () => {
@@ -33,5 +33,15 @@ describe('getExitCode', () => {
 
   it('returns the usual code when the target was fetched', () => {
     expect(getExitCode({ errors: 1, warnings: 0 }, false, true)).toBe(1);
+  });
+});
+
+describe('usageExitCode', () => {
+  it('keeps 0 for --help and --version', () => {
+    expect(usageExitCode(0)).toBe(0);
+  });
+
+  it('turns a commander usage error into 2, the bad-input code', () => {
+    expect(usageExitCode(1)).toBe(2);
   });
 });

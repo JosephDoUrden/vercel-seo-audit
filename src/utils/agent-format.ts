@@ -86,9 +86,11 @@ function toAgentFinding(f: AuditFinding, module: string, cut: { truncated: boole
   };
 }
 
-const actionable = (f: AuditFinding): boolean => f.severity !== 'pass' && !f.ignored;
+// An ignored TARGET_UNREACHABLE stays: the run exits 2 regardless, and the finding says why.
+const actionable = (f: AuditFinding): boolean =>
+  f.severity !== 'pass' && (!f.ignored || f.code === 'TARGET_UNREACHABLE');
 
-// Pass and ignored findings are dropped; the rest sort error, warning, info,
+// Pass and ignored findings are dropped (but see above); the rest sort error, warning, info,
 // then by module run order, keeping each module's own order within that.
 function agentFindings(entries: { finding: AuditFinding; module: string }[], cut: { truncated: boolean }): AgentFinding[] {
   return entries

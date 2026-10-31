@@ -78,6 +78,16 @@ describe('buildAgentReport', () => {
     expect(out.summary).toEqual({ errors: 1, warnings: 0, info: 0 });
   });
 
+  it('keeps an ignored TARGET_UNREACHABLE, since the run still exits 2', () => {
+    const r = report(
+      [{ module: 'target', findings: [finding({ code: 'TARGET_UNREACHABLE', category: 'indexing', ignored: true })] }],
+      { page: { status: null, finalUrl: null, nextjs: false } },
+    );
+    const out = buildAgentReport(r, { version: '9.9.9', exitCode: 2 });
+    expect(out.findings.map((f) => f.code)).toEqual(['TARGET_UNREACHABLE']);
+    expect(out.summary.errors).toBe(0);
+  });
+
   it('maps a finding to the contract fields, with no explanation', () => {
     const r = report([{ module: 'metadata', findings: [finding({ details: { title: null } })] }]);
     expect(buildAgentReport(r, opts).findings[0]).toEqual({
