@@ -266,3 +266,105 @@ describe('auditRobots', () => {
     expect(findings.map((f) => f.code)).toEqual(['ROBOTS_MISSING']);
   });
 });
+
+describe('auditRobots render assets', () => {
+  const nextHtml = `<!doctype html><html><head>
+    <link rel="stylesheet" href="/_next/static/css/app.css">
+    <script src="/_next/static/chunks/main.js" async></script>
+    <script src="https://cdn.example.net/analytics.js"></script>
+  </head><body><img src="/_next/image?url=%2Fhero.png&w=1080&q=75" alt=""></body></html>`;
+
+  function codes(findings: { code: string }[]) {
+    return findings.map((f) => f.code).filter((c) => c.startsWith('ROBOTS_BLOCKS'));
+  }
+
+  async function run(robots: string, html = nextHtml) {
+    mockFetchPage.mockResolvedValue(robotsPage(`${robots}\nSitemap: https://example.com/sitemap.xml\n`));
+    return auditRobots(makeCtx({ html, finalUrl: 'https://example.com/' }));
+  }
+
+  it('reports ROBOTS_BLOCKS_RENDER_ASSETS when Disallow: /_next/ covers a _next/static script', async () => {
+    const findings = await run('User-agent: *\nDisallow: /_next/');
+    const f = findings.find((x) => x.code === 'ROBOTS_BLOCKS_RENDER_ASSETS');
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe('error');
+    expect(f!.message).toContain('2');
+    expect(f!.details).toEqual({
+      blocked: ['https://example.com/_next/static/chunks/main.js', 'https://example.com/_next/static/css/app.css'],
+      rule: 'Disallow: /_next/',
+      group: '*',
+    });
+    expect(f!.suggestion).toContain('Allow: /_next/static/');
+    expect(findings.filter((x) => x.code === 'ROBOTS_BLOCKS_RENDER_ASSETS')).toHaveLength(1);
+  });
+
+  it('reports ROBOTS_BLOCKS_NEXT_IMAGE as info when the page uses /_next/image', async () => {
+    const findings = await run('User-agent: *\nDisallow: /_next/');
+    const f = findings.find((x) => x.code === 'ROBOTS_BLOCKS_NEXT_IMAGE');
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe('info');
+    expect(f!.details).toMatchObject({ rule: 'Disallow: /_next/', group: '*' });
+  });
+
+  it('says nothing when Allow: /_next/static/ follows Disallow: /_next/', async () => {
+    const findings = await run('User-agent: *\nDisallow: /_next/\nAllow: /_next/static/\nAllow: /_next/image');
+    expect(codes(findings)).toEqual([]);
+  });
+
+  it('says nothing for a non-Next page under Disallow: /_next/', async () => {
+    const html =
+      '<html><head><script src="/js/app.js"></script><link rel="stylesheet" href="/css/site.css"></head><body><img src="/hero.png" alt=""></body></html>';
+    const findings = await run('User-agent: *\nDisallow: /_next/', html);
+    expect(codes(findings)).toEqual([]);
+  });
+
+  it('follows the googlebot group over *', async () => {
+    expect(codes(await run('User-agent: *\nDisallow: /_next/\n\nUser-agent: Googlebot\nDisallow: /private/'))).toEqual([]);
+
+    const findings = await run('User-agent: *\nAllow: /\n\nUser-agent: googlebot\nDisallow: /_next/static/');
+    const f = findings.find((x) => x.code === 'ROBOTS_BLOCKS_RENDER_ASSETS');
+    expect(f!.details).toMatchObject({ rule: 'Disallow: /_next/static/', group: 'googlebot' });
+  });
+
+  it('applies rules under consecutive User-agent lines to each of them', async () => {
+    const findings = await run('User-agent: googlebot\nUser-agent: bingbot\nDisallow: /_next/');
+    expect(codes(findings)).toContain('ROBOTS_BLOCKS_RENDER_ASSETS');
+  });
+
+  it('drops a trailing comment from the rule', async () => {
+    const findings = await run('User-agent: * # everyone\nDisallow: /_next/ # build output');
+    const f = findings.find((x) => x.code === 'ROBOTS_BLOCKS_RENDER_ASSETS');
+    expect(f!.details).toMatchObject({ rule: 'Disallow: /_next/', group: '*' });
+  });
+
+  it('flags non-Next assets too, with a generic suggestion', async () => {
+    const html = '<html><head><script src="js/app.js"></script></head></html>';
+    const findings = await run('User-agent: *\nDisallow: /js/', html);
+    const f = findings.find((x) => x.code === 'ROBOTS_BLOCKS_RENDER_ASSETS');
+    expect(f!.details).toMatchObject({ blocked: ['https://example.com/js/app.js'], rule: 'Disallow: /js/' });
+    expect(f!.suggestion).not.toContain('/_next/static/');
+  });
+
+  it('ignores cross-origin assets', async () => {
+    const html = '<html><head><script src="https://cdn.example.net/_next/static/a.js"></script></head></html>';
+    expect(codes(await run('User-agent: *\nDisallow: /_next/', html))).toEqual([]);
+  });
+
+  it('leaves it to ROBOTS_BLOCKS_ALL when the page itself is blocked', async () => {
+    expect(codes(await run('User-agent: *\nDisallow: /'))).toEqual(['ROBOTS_BLOCKS_ALL']);
+  });
+
+  it('caps blocked at 10 URLs and counts them all in the message', async () => {
+    const scripts = Array.from({ length: 12 }, (_, i) => `<script src="/_next/static/chunks/${i}.js"></script>`).join('');
+    const findings = await run('User-agent: *\nDisallow: /_next/', `<html><head>${scripts}</head></html>`);
+    const f = findings.find((x) => x.code === 'ROBOTS_BLOCKS_RENDER_ASSETS');
+    expect(f!.message).toContain('12');
+    expect((f!.details as { blocked: string[] }).blocked).toHaveLength(10);
+  });
+
+  it('skips the check when the page was not fetched', async () => {
+    mockFetchPage.mockResolvedValue(robotsPage('User-agent: *\nDisallow: /_next/\n'));
+    expect(codes(await auditRobots(makeCtx()))).toEqual([]);
+    expect(mockFetchPage).toHaveBeenCalledTimes(1);
+  });
+});
