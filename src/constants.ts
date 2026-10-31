@@ -9,6 +9,10 @@ export const MAX_HTML_BYTES = 10 * 1024 * 1024;
 export const MAX_SITEMAP_BYTES = 50_000_000;
 export const USER_AGENT = 'vercel-seo-audit/2.11.0'; // x-release-please-version
 export const SITEMAP_SAMPLE_SIZE = 10;
+// "All formats limit a single sitemap to 50MB (uncompressed) or 50,000 URLs."
+// https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap, updated 08 Jul 2026.
+// The 50 MB half is MAX_SITEMAP_BYTES above.
+export const SITEMAP_MAX_URLS = 50_000;
 
 export const COMMON_PAGES = ['/about', '/contact', '/blog', '/pricing'];
 

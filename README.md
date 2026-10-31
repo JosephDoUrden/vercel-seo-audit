@@ -259,6 +259,13 @@ The page is fetched once before any module runs.
   and up to five examples). They are never fetched, sampled or crawled. `http` and `https` on
   the same host count as the same host, and so does the host the page or the sitemap
   redirected to
+* Strict validation the way Google reads the file: unescaped `&` or `<`, unclosed tags and
+  undeclared entities (`SITEMAP_MALFORMED_XML`), more than 50,000 URLs in one file
+  (`SITEMAP_TOO_MANY_URLS`), relative `<loc>` values (`SITEMAP_RELATIVE_URLS`), `lastmod`
+  values that are not W3C Datetime (`SITEMAP_LASTMOD_INVALID`), every `lastmod` on the same
+  second, which is what `new Date()` in `app/sitemap.ts` produces (`SITEMAP_LASTMOD_IDENTICAL`),
+  `priority` or `changefreq`, which Google ignores (`SITEMAP_IGNORED_FIELDS`), and an index
+  that lists another index (`SITEMAP_INDEX_NESTED`)
 
 Wherever the audit follows a URL it did not get from you (redirect hops, child sitemaps,
 crawled pages, `og:image` / `twitter:image` / `<img>` probes, hreflang alternates), it refuses
