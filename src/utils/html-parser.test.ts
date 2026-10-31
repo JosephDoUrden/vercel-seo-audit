@@ -355,12 +355,12 @@ describe('getImages', () => {
 describe('getHeadScripts', () => {
   it('extracts src, type and the boolean attributes', () => {
     const scripts = getHeadScripts(
-      html('<script src="/a.js"></script><script type="application/ld+json">{}</script><script src="/b.js" async defer></script>')
+      html('<script src="/a.js"></script><script type="application/ld+json">{}</script><script src="/b.js" async defer nomodule></script>')
     );
     expect(scripts).toEqual([
-      { src: '/a.js', type: null, async: false, defer: false },
-      { src: null, type: 'application/ld+json', async: false, defer: false },
-      { src: '/b.js', type: null, async: true, defer: true },
+      { src: '/a.js', type: null, async: false, defer: false, noModule: false },
+      { src: null, type: 'application/ld+json', async: false, defer: false, noModule: false },
+      { src: '/b.js', type: null, async: true, defer: true, noModule: true },
     ]);
   });
 
@@ -373,7 +373,7 @@ describe('getHeadScripts', () => {
 
   it('keeps a > inside a quoted attribute value', () => {
     const scripts = getHeadScripts(html('<script data-cfg="a>b" src="/a.js"></script>'));
-    expect(scripts).toEqual([{ src: '/a.js', type: null, async: false, defer: false }]);
+    expect(scripts).toEqual([{ src: '/a.js', type: null, async: false, defer: false, noModule: false }]);
   });
 });
 

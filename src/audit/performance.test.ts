@@ -82,6 +82,19 @@ describe('auditPerformance', () => {
     expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
   });
 
+  it('does not flag nomodule scripts', async () => {
+    const html = `<html><head><script src="/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script></head><body></body></html>`;
+    const findings = await auditPerformance(makeCtx(html));
+    expect(findings.find((f) => f.code === 'RENDER_BLOCKING_SCRIPT')).toBeUndefined();
+  });
+
+  it('still flags a plain blocking script next to a nomodule one', async () => {
+    const html = `<html><head><script src="/polyfills.js" nomodule></script><script src="/app.js"></script></head><body></body></html>`;
+    const f = (await auditPerformance(makeCtx(html))).find((f) => f.code === 'RENDER_BLOCKING_SCRIPT');
+    expect(f).toBeDefined();
+    expect(f!.details).toEqual({ count: 1, srcs: ['/app.js'] });
+  });
+
   it('does not flag JSON-LD data blocks', async () => {
     const ld = '<script type="application/ld+json">{"@context":"https://schema.org"}</script>';
     const html = `<html><head>${ld}${ld}${ld}</head><body></body></html>`;

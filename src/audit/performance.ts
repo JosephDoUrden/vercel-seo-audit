@@ -84,8 +84,9 @@ export async function auditPerformance(ctx: AuditContext): Promise<AuditFinding[
   // 2. Render-blocking scripts in <head>: external classic scripts without async or defer.
   // Inline scripts have nothing to download, and data blocks (ld+json, importmap,
   // speculationrules, any non-JavaScript type) are never executed, so none of them qualify.
+  // Nor do nomodule scripts: every browser that supports modules, Googlebot included, skips them.
   const blocking = getHeadScripts(html)
-    .filter((s) => s.src && !s.async && !s.defer && isClassicScript(s.type))
+    .filter((s) => s.src && !s.async && !s.defer && !s.noModule && isClassicScript(s.type))
     .map((s) => s.src as string);
   if (blocking.length > 0) {
     findings.push({

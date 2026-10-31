@@ -162,6 +162,7 @@ export interface HeadScript {
   type: string | null;
   async: boolean;
   defer: boolean;
+  noModule: boolean;
 }
 
 export function getHeadScripts(html: string): HeadScript[] {
@@ -173,6 +174,7 @@ export function getHeadScripts(html: string): HeadScript[] {
       type: $(el).attr('type') ?? null,
       async: $(el).attr('async') !== undefined,
       defer: $(el).attr('defer') !== undefined,
+      noModule: $(el).attr('nomodule') !== undefined,
     });
   });
   return scripts;
