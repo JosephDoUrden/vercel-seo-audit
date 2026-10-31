@@ -615,7 +615,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: JosephDoUrden/vercel-seo-audit@vercel-seo-audit-v2.18.0 # x-release-please-version
+      - uses: JosephDoUrden/vercel-seo-audit@vercel-seo-audit-v2.19.0 # x-release-please-version
         with:
           url: https://your-site.com
           strict: true
