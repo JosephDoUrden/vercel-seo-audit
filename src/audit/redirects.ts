@@ -15,6 +15,19 @@ import {
   getOrigin,
 } from '../utils/url.js';
 
+// How far the audited URL moved: `none` when only the scheme or a trailing
+// slash changed (HTTP_NO_HTTPS_REDIRECT and TRAILING_SLASH_REDIRECT cover those),
+// `www` when the host only gained or lost `www.`, `elsewhere` for anything else.
+function targetMove(from: string, to: string): 'none' | 'www' | 'elsewhere' {
+  const a = new URL(from);
+  const b = new URL(to);
+  const rest = (u: URL) => `${u.port}${u.pathname.replace(/\/+$/, '')}${u.search}`;
+  if (rest(a) !== rest(b)) return 'elsewhere';
+  if (a.hostname === b.hostname) return 'none';
+  const bare = (host: string) => host.replace(/^www\./, '');
+  return bare(a.hostname) === bare(b.hostname) ? 'www' : 'elsewhere';
+}
+
 export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
   const { normalizedUrl, fetchOptions } = ctx;
@@ -47,6 +60,26 @@ export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]>
       details: { hops: chain.hops, finalUrl: chain.finalUrl },
       url: normalizedUrl,
     });
+  }
+
+  // 1b. The audited URL itself lands somewhere else, so every page check
+  // describes the destination rather than the URL that was asked for.
+  if (!chain.isCircular && chain.hops.length > 0) {
+    const move = targetMove(normalizedUrl, chain.finalUrl);
+    if (move !== 'none') {
+      findings.push({
+        code: 'TARGET_REDIRECTED',
+        severity: move === 'www' ? 'info' : 'warning',
+        category: 'redirect',
+        message: `The audited URL redirects to ${chain.finalUrl}`,
+        explanation:
+          'Search Console reports a URL like this as "Page with redirect" and does not index it. The checks below describe the destination, not the URL you asked for.',
+        suggestion:
+          'Audit the destination URL directly. If the redirect is unintended, fix it in next.config.js redirects, middleware or vercel.json.',
+        details: { from: normalizedUrl, to: chain.finalUrl, hops: chain.hops, status: chain.hops[0].status },
+        url: normalizedUrl,
+      });
+    }
   }
 
   // 2. HTTP → HTTPS check
@@ -90,7 +123,15 @@ export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]>
     const testUrl = hasTrailingSlash(normalizedUrl) ? withoutSlash : withSlash;
 
     const slashRes = await fetchWithoutRedirect(testUrl, fetchOptions);
-    if (slashRes.status >= 300 && slashRes.status < 400) {
+    const location = slashRes.headers.get('location');
+    const slashTarget = location ? new URL(location, testUrl).href : undefined;
+    // A probe that lands where the audited URL already redirected is the same
+    // redirect seen again, and TARGET_REDIRECTED has reported it.
+    const reobserved =
+      slashTarget !== undefined &&
+      chain.hops.length > 0 &&
+      (slashTarget === chain.finalUrl || chain.hops.some((hop) => hop.location === slashTarget));
+    if (slashRes.status >= 300 && slashRes.status < 400 && !reobserved) {
       const status = slashRes.status;
       findings.push({
         code: 'TRAILING_SLASH_REDIRECT',

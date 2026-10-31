@@ -41,6 +41,7 @@ export const ISSUE_CODES = [
   'TRAILING_SLASH_REDIRECT',
   'META_REFRESH_REDIRECT',
   'COMMON_PAGE_REDIRECT',
+  'TARGET_REDIRECTED',
   // Target issues: the audited page itself
   'TARGET_UNREACHABLE',
   'TARGET_HTTP_ERROR',
@@ -178,6 +179,7 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   TRAILING_SLASH_REDIRECT: 'Adding or removing the trailing slash on the audited URL causes a redirect, so links in the other form cost an extra hop.',
   META_REFRESH_REDIRECT: 'The page redirects with a <meta http-equiv="refresh"> tag instead of an HTTP redirect, which search engines treat less reliably.',
   COMMON_PAGE_REDIRECT: 'One of the common paths or the --pages paths goes through a chain of redirects before it answers.',
+  TARGET_REDIRECTED: 'The audited URL redirects to a different host or path, so the page checks describe the destination rather than the URL given.',
   TARGET_UNREACHABLE: 'The audited URL could not be fetched at all (DNS, TLS, connection or timeout), so nothing else was audited.',
   TARGET_HTTP_ERROR: 'The audited URL answered with a 4xx or 5xx status, and search engines drop such pages from the index.',
   TARGET_NOT_HTML: 'The audited URL did not return HTML, or returned an empty body, so the checks that read the page as HTML were skipped.',

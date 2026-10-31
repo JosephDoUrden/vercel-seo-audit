@@ -259,6 +259,7 @@ The page is fetched once before any module runs.
 ### Redirects
 
 * Redirect chains & loops (audited page + common pages)
+* The audited URL itself redirecting to another host or path (`TARGET_REDIRECTED`; info for a www/apex hop only), since every other check then describes the destination
 * HTTP → HTTPS redirect
 * Trailing slash: whether the other form of the URL redirects, and with which status (Next.js uses a 308)
 * Meta refresh redirects (`<meta http-equiv="refresh">`)

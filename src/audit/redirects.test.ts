@@ -284,4 +284,114 @@ describe('auditRedirects', () => {
     expect(mockGetMetaRefresh).toHaveBeenCalledWith('<html>shared</html>');
     expect(findings.find((f) => f.code === 'META_REFRESH_REDIRECT')).toBeDefined();
   });
+
+  describe('TARGET_REDIRECTED', () => {
+    function entryRedirect(from: string, status: number, to: string) {
+      mockFollowRedirectChain.mockResolvedValueOnce({
+        hops: [{ url: from, status, location: to }],
+        finalUrl: to,
+        isCircular: false,
+      });
+    }
+
+    it('warns when the audited URL redirects to another host', async () => {
+      entryRedirect('https://turborepo.com/', 301, 'https://turborepo.dev/');
+
+      const findings = await auditRedirects(makeCtx({ url: 'https://turborepo.com', normalizedUrl: 'https://turborepo.com/' }));
+      const target = findings.find((f) => f.code === 'TARGET_REDIRECTED');
+      expect(target).toBeDefined();
+      expect(target!.severity).toBe('warning');
+      expect(target!.message).toBe('The audited URL redirects to https://turborepo.dev/');
+      expect(target!.url).toBe('https://turborepo.com/');
+      expect(target!.details).toMatchObject({ from: 'https://turborepo.com/', to: 'https://turborepo.dev/', status: 301 });
+      expect(target!.details!.hops).toHaveLength(1);
+    });
+
+    it('warns when the audited URL redirects to another path on the same host', async () => {
+      const from = 'https://nextjs.org/docs/app/building-your-application/routing';
+      const to = 'https://nextjs.org/docs/app/getting-started/layouts-and-pages';
+      entryRedirect(from, 308, to);
+
+      const findings = await auditRedirects(makeCtx({ url: from, normalizedUrl: from }));
+      const target = findings.find((f) => f.code === 'TARGET_REDIRECTED');
+      expect(target).toBeDefined();
+      expect(target!.severity).toBe('warning');
+      expect(target!.details).toMatchObject({ from, to, status: 308 });
+    });
+
+    it('warns when only the query string differs', async () => {
+      entryRedirect('https://example.com/?a=1', 301, 'https://example.com/?a=2');
+
+      const findings = await auditRedirects(makeCtx({ normalizedUrl: 'https://example.com/?a=1' }));
+      expect(findings.find((f) => f.code === 'TARGET_REDIRECTED')?.severity).toBe('warning');
+    });
+
+    it('is info when the redirect is only a www/apex hop', async () => {
+      entryRedirect('https://www.example.com/', 308, 'https://example.com/');
+
+      const findings = await auditRedirects(makeCtx({ normalizedUrl: 'https://www.example.com/' }));
+      const target = findings.find((f) => f.code === 'TARGET_REDIRECTED');
+      expect(target).toBeDefined();
+      expect(target!.severity).toBe('info');
+    });
+
+    it('is not reported for an http to https hop alone', async () => {
+      entryRedirect('http://example.com/', 301, 'https://example.com/');
+
+      const findings = await auditRedirects(makeCtx({ normalizedUrl: 'http://example.com/' }));
+      expect(findings.find((f) => f.code === 'TARGET_REDIRECTED')).toBeUndefined();
+    });
+
+    it('is not reported for a trailing-slash hop alone', async () => {
+      entryRedirect('https://example.com/about', 308, 'https://example.com/about/');
+
+      const findings = await auditRedirects(makeCtx({ normalizedUrl: 'https://example.com/about' }));
+      expect(findings.find((f) => f.code === 'TARGET_REDIRECTED')).toBeUndefined();
+    });
+
+    it('is not reported when the audited URL answers directly', async () => {
+      const findings = await auditRedirects(makeCtx());
+      expect(findings.find((f) => f.code === 'TARGET_REDIRECTED')).toBeUndefined();
+    });
+
+    it('is not reported for a redirect loop', async () => {
+      mockFollowRedirectChain.mockResolvedValueOnce({
+        hops: [
+          { url: 'https://example.com/', status: 301, location: 'https://example.com/a' },
+          { url: 'https://example.com/a', status: 301, location: 'https://example.com/' },
+        ],
+        finalUrl: 'https://example.com/',
+        isCircular: true,
+      });
+
+      const findings = await auditRedirects(makeCtx());
+      expect(findings.find((f) => f.code === 'TARGET_REDIRECTED')).toBeUndefined();
+    });
+
+    it('drops TRAILING_SLASH_REDIRECT when the probe lands where the entry redirected', async () => {
+      const from = 'https://example.com/old';
+      const to = 'https://example.com/new';
+      entryRedirect(from, 308, to);
+      mockFetchWithoutRedirect.mockResolvedValue({
+        status: 308,
+        headers: new Headers({ location: '/new' }),
+      } as unknown as Response);
+
+      const findings = await auditRedirects(makeCtx({ normalizedUrl: from }));
+      expect(findings.find((f) => f.code === 'TARGET_REDIRECTED')).toBeDefined();
+      expect(findings.find((f) => f.code === 'TRAILING_SLASH_REDIRECT')).toBeUndefined();
+    });
+
+    it('keeps TRAILING_SLASH_REDIRECT when the probe lands somewhere else', async () => {
+      const from = 'https://example.com/old';
+      entryRedirect(from, 308, 'https://example.com/new');
+      mockFetchWithoutRedirect.mockResolvedValue({
+        status: 308,
+        headers: new Headers({ location: 'https://example.com/old' }),
+      } as unknown as Response);
+
+      const findings = await auditRedirects(makeCtx({ normalizedUrl: from }));
+      expect(findings.find((f) => f.code === 'TRAILING_SLASH_REDIRECT')).toBeDefined();
+    });
+  });
 });
