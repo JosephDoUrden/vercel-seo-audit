@@ -147,6 +147,13 @@ export const ISSUE_CODES = [
   'URL_HOST_LOCALHOST',
   'URL_HOST_VERCEL_APP',
   'URL_HOST_MISMATCH',
+  // The canonical as Google reads it: placement, count, the Link header and the target
+  'CANONICAL_MULTIPLE',
+  'CANONICAL_IN_BODY',
+  'CANONICAL_HEADER_CONFLICT',
+  'CANONICAL_RELATIVE',
+  'CANONICAL_TARGET_NOT_OK',
+  'CANONICAL_NOINDEX_CONFLICT',
 ] as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[number];
