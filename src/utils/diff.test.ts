@@ -29,6 +29,21 @@ describe('diffReports', () => {
     expect(diff.unchanged.map((f) => f.code)).toEqual(['TITLE_MISSING']);
   });
 
+  it('leaves out the modules either run skipped by pack', () => {
+    const full = report([
+      { module: 'metadata', findings: [finding('TITLE_MISSING')] },
+      { module: 'vercel', findings: [finding('VERCEL_CACHE_MISS')] },
+    ]);
+    const skipped = { ...report([{ module: 'metadata', findings: [] }]), skippedByPack: ['vercel' as const] };
+
+    const later = diffReports(skipped, full);
+    expect(later.resolvedIssues.map((f) => f.code)).toEqual(['TITLE_MISSING']);
+    expect(later.newIssues).toEqual([]);
+
+    const earlier = diffReports(full, skipped);
+    expect(earlier.newIssues.map((f) => f.code)).toEqual(['TITLE_MISSING']);
+  });
+
   it('compares only the selected modules when the current run used only', () => {
     const previous = report([
       { module: 'metadata', findings: [finding('TITLE_MISSING')] },

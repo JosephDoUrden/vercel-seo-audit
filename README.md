@@ -5,6 +5,8 @@
 [![CI](https://github.com/JosephDoUrden/vercel-seo-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/JosephDoUrden/vercel-seo-audit/actions/workflows/ci.yml)
 [![licence](https://img.shields.io/npm/l/vercel-seo-audit.svg)](./LICENSE)
 
+See your site the way Googlebot does: no JavaScript, no source, just what the server sent. The deepest Next.js and Vercel indexing checks of any audit tool.
+
 > **If you're using Vercel and Google hates your site, this is for you.**
 
 A CLI that explains **why Google isn't indexing your Next.js site**, from what the deployed site sends back. Two of its checks are not in other SEO audit tools:
@@ -122,7 +124,7 @@ const exitCode = getExitCode(report.summary, false);
 console.log(formatAgent(report, { version: VERSION, exitCode }));
 ```
 
-`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
+`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`, `skipPacks`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
 
 ```ts
 const controller = new AbortController();
@@ -190,6 +192,12 @@ vercel-seo-audit https://your-site.com --ignore ROBOTS_MISSING,FAVICON_MISSING
 # Run only some audit modules (comma-separated, repeatable)
 vercel-seo-audit https://your-site.com --only vercel,streamedMetadata
 
+# Leave out a module pack on a site that is not on Vercel or not Next.js (vercel, nextjs)
+vercel-seo-audit https://your-site.com --skip-pack vercel
+
+# List the modules with their pack and how many codes each reports
+vercel-seo-audit explain --modules
+
 # Print starter files for findings that have one, and write them with --apply
 vercel-seo-audit https://your-site.com --fix
 vercel-seo-audit https://your-site.com --fix --apply
@@ -247,29 +255,33 @@ Ignored findings do not count towards the summary or the exit code. The text rep
 
 `--only` (or the `only` array in `.seoauditrc.json`) runs just the modules you name. The page itself is still fetched once and shared, so `--only streamedMetadata` costs at most two requests: the page, and the same page again as an HTML-limited bot when its metadata is streamed. `--only` on the command line replaces `only` in the config rather than adding to it.
 
-| Module | What it checks |
-|--------|----------------|
-| `robots` | robots.txt |
-| `redirects` | Redirect chains, trailing slash, www and the `--pages` paths |
-| `sitemap` | sitemap.xml and a sample of its URLs; adds `robots` |
-| `metadata` | Title, description, canonical, `noindex`, Open Graph and Twitter Card |
-| `favicon` | Favicon file and `<link>` tags |
-| `nextjs` | Next.js and Vercel detection, trailing slash and middleware headers |
-| `structuredData` | JSON-LD |
-| `i18n` | hreflang |
-| `images` | Image `alt` text, `next/image`, lazy loading and sizes |
-| `security` | Security headers |
-| `performance` | Performance hints |
-| `vercel` | Vercel CDN cache headers and indexable preview URLs |
-| `streamedMetadata` | Metadata streamed into `<body>` by Next.js 15.2+ |
-| `hostLeak` | Canonical, social card, hreflang and JSON-LD URLs on localhost or a vercel.app host |
-| `uaParity` | What the page serves to Googlebot, an HTML-limited bot and another crawler, against the default user agent |
-| `soft404` | What a path that does not exist answers: 404, a 200, a redirect or the Next.js error shell; adds `robots` and `sitemap` |
-| `crawl` | Sitemap URLs up to the `--crawl` limit (default 50); adds `robots` and `sitemap` |
+| Module | Pack | What it checks |
+|--------|------|----------------|
+| `robots` | generic | robots.txt |
+| `redirects` | generic | Redirect chains, trailing slash, www and the `--pages` paths |
+| `sitemap` | generic | sitemap.xml and a sample of its URLs; adds `robots` |
+| `metadata` | generic | Title, description, canonical, `noindex`, Open Graph and Twitter Card |
+| `favicon` | generic | Favicon file and `<link>` tags |
+| `nextjs` | nextjs | Next.js and Vercel detection, trailing slash and middleware headers |
+| `structuredData` | generic | JSON-LD |
+| `i18n` | generic | hreflang |
+| `images` | generic | Image `alt` text, `next/image`, lazy loading and sizes |
+| `security` | generic | Security headers |
+| `performance` | generic | Performance hints |
+| `vercel` | vercel | Vercel CDN cache headers and indexable preview URLs |
+| `streamedMetadata` | nextjs | Metadata streamed into `<body>` by Next.js 15.2+ |
+| `hostLeak` | generic | Canonical, social card, hreflang and JSON-LD URLs on localhost or a vercel.app host |
+| `uaParity` | generic | What the page serves to Googlebot, an HTML-limited bot and another crawler, against the default user agent |
+| `soft404` | generic | What a path that does not exist answers: 404, a 200, a redirect or the Next.js error shell; adds `robots` and `sitemap` |
+| `crawl` | generic | Sitemap URLs up to the `--crawl` limit (default 50); adds `robots` and `sitemap` |
 
 A module that reads another one's results brings it along: `--only sitemap` also runs `robots`, so the robots.txt cross-check still happens, and `--only crawl` runs `robots` and `sitemap` first. `--only` without `crawl` turns crawling off even if `--crawl` is set (a warning says so); naming `crawl` turns it on, with the `--crawl` limit or the default of 50. Ids match exactly, case included, and an unknown one stops the run with exit code `2`.
 
 A limited run says so: the text, Markdown and HTML reports print a `Modules:` line, and the JSON report gains an `only` array listing the modules that ran. With `--diff`, the previous report is compared on the same modules, so findings from modules you did not run are not shown as resolved.
+
+#### Module packs
+
+Every module is tagged with a pack. Generic modules read any site. The `vercel` pack (`vercel`) checks Vercel's CDN headers and preview URLs, and the `nextjs` pack (`nextjs`, `streamedMetadata`) checks Next.js behaviour. `--skip-pack vercel,nextjs` (repeatable, or the `skipPacks` array in `.seoauditrc.json`, which the flag replaces) leaves those modules out, and `--format agent` lists them under `skipped`. A module you name in `--only` still runs, with a note on stderr. The JSON report gains a `skippedByPack` array, and `--diff` leaves those modules out of the comparison. `vercel-seo-audit explain --modules` prints each module with its pack and how many codes it reports.
 
 ---
 

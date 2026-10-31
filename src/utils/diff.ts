@@ -15,14 +15,17 @@ const toKey = (f: AuditFinding) => `${codeOf(f)}::${f.url ?? ''}`;
 /**
  * Compares two reports by finding code and URL. When either run was limited
  * with `--only`, both are cut down to the modules they share, so findings from
- * a module only one of them ran are reported as neither new nor resolved.
+ * a module only one of them ran are reported as neither new nor resolved. The
+ * modules either run left out with `--skip-pack` are dropped from both the same way.
  * The `target` findings (the up-front fetch of the page) are always compared,
  * since every run makes that fetch.
  */
 export function diffReports(current: AuditReport, previous: AuditReport): DiffResult {
+  const skipped = new Set<string>([...current.skippedByPack ?? [], ...previous.skippedByPack ?? []]);
   const shared = (m: { module: string }) =>
     m.module === 'target'
-    || (!current.only || current.only.includes(m.module as ModuleId))
+    || !skipped.has(m.module)
+    && (!current.only || current.only.includes(m.module as ModuleId))
     && (!previous.only || previous.only.includes(m.module as ModuleId));
 
   // Ignored findings stay in the diff (tagged by formatDiff). The previous

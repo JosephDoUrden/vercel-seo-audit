@@ -31,6 +31,9 @@ characters (other than tab and newline) and bidi overrides are stripped from eve
 old.json` the comparison goes under a `diff` key, so stdout is still one JSON document. `--fix` is
 refused with `--format agent`; the fix text is already in each finding.
 
+`--skip-pack vercel` (or `nextjs`) leaves that pack's modules out on a site that is not on Vercel or
+not Next.js; they show in `skipped`.
+
 `explain <CODE>` prints the module that reports a code, its category and one sentence on what it
 means. An unknown code exits 2 and names the three closest codes.
 

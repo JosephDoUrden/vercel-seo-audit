@@ -114,6 +114,13 @@ export function validateConfig(raw: unknown): SeoAuditConfig {
     config.only = obj.only;
   }
 
+  if ('skipPacks' in obj) {
+    if (!Array.isArray(obj.skipPacks) || !obj.skipPacks.every((p): p is string => typeof p === 'string')) {
+      throw new Error(`Error in ${CONFIG_FILE}: "skipPacks" must be an array of strings`);
+    }
+    config.skipPacks = obj.skipPacks;
+  }
+
   if ('format' in obj) {
     if (obj.format !== 'text' && obj.format !== 'agent') {
       throw new Error(`Error in ${CONFIG_FILE}: "format" must be "text" or "agent"`);

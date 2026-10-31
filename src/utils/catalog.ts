@@ -1,4 +1,4 @@
-import { ISSUE_CODES, ISSUE_DESCRIPTIONS, MODULE_IDS } from '../types.js';
+import { ISSUE_CODES, ISSUE_DESCRIPTIONS, MODULE_IDS, MODULE_PACKS } from '../types.js';
 import type { IssueCategory, IssueCode, ModuleId } from '../types.js';
 
 /** `target` is the up-front fetch of the audited page, before any module runs. */
@@ -138,4 +138,19 @@ export function explain(input: string): { ok: true; text: string } | { ok: false
       entry.description,
     ].join('\n'),
   };
+}
+
+/**
+ * The text `vercel-seo-audit explain --modules` prints: one line per module, in
+ * run order, with its pack and the number of codes it reports (MODULE_FAILED,
+ * which any module can report, is not counted).
+ */
+export function listModules(): string {
+  const width = Math.max(...MODULE_IDS.map((id) => id.length));
+  const packWidth = Math.max(...Object.values(MODULE_PACKS).map((pack) => pack.length));
+  const rows = MODULE_IDS.map((id) => {
+    const codes = new Set(SOURCES.filter(([source]) => source === id).flatMap(([, , list]) => list));
+    return `${id.padEnd(width)}  ${MODULE_PACKS[id].padEnd(packWidth)}  ${codes.size}`;
+  });
+  return [`${'module'.padEnd(width)}  ${'pack'.padEnd(packWidth)}  codes`, ...rows].join('\n');
 }
