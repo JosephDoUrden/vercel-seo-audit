@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.11.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.10.0...vercel-seo-audit-v2.11.0) (2026-10-31)
+
+
+### Features
+
+* **audit:** report an edge challenge on the entry page, robots.txt or the sitemap ([#182](https://github.com/JosephDoUrden/vercel-seo-audit/issues/182)) ([198b7ee](https://github.com/JosephDoUrden/vercel-seo-audit/commit/198b7ee9e7deeb2721cf05b7784844820156963e))
+* **audit:** report canonical, social and JSON-LD URLs that leak localhost or a vercel.app host ([#185](https://github.com/JosephDoUrden/vercel-seo-audit/issues/185)) ([75aba45](https://github.com/JosephDoUrden/vercel-seo-audit/commit/75aba45e9880bbeb340e0f18f93669eeb00621ef))
+* **robots:** flag Disallow rules that block the page's scripts and stylesheets ([#183](https://github.com/JosephDoUrden/vercel-seo-audit/issues/183)) ([c9fa8ae](https://github.com/JosephDoUrden/vercel-seo-audit/commit/c9fa8aea653a14947aa3f64abd155dfe55069166))
+* **robots:** report what Google does with each robots.txt status and size ([#180](https://github.com/JosephDoUrden/vercel-seo-audit/issues/180)) ([b6f779f](https://github.com/JosephDoUrden/vercel-seo-audit/commit/b6f779f49c60b14b610adc5ded549905db3acde4))
+
+
+### Bug Fixes
+
+* harden fetching, exit 2 on an unreachable target, surface module failures ([#184](https://github.com/JosephDoUrden/vercel-seo-audit/issues/184)) ([cccd312](https://github.com/JosephDoUrden/vercel-seo-audit/commit/cccd3125b1f14e46a25bfc0bb0e5d2c05ea4944d))
+* **performance:** ignore nomodule scripts in the render-blocking check ([#175](https://github.com/JosephDoUrden/vercel-seo-audit/issues/175)) ([8f6e346](https://github.com/JosephDoUrden/vercel-seo-audit/commit/8f6e34675420c54ad1b4038e056dde32e7a86f78))
+* **structured-data:** accept [@graph](https://github.com/graph) blocks whose nodes carry [@type](https://github.com/type) ([#176](https://github.com/JosephDoUrden/vercel-seo-audit/issues/176)) ([cda2ceb](https://github.com/JosephDoUrden/vercel-seo-audit/commit/cda2cebc3b447176ad846459fa3b88e8617a77c7))
+* **structured-data:** handle [@type](https://github.com/type) arrays and index graph nodes in field findings ([#178](https://github.com/JosephDoUrden/vercel-seo-audit/issues/178)) ([19aad56](https://github.com/JosephDoUrden/vercel-seo-audit/commit/19aad566a30cc659a83c95e46c9f997eabe925db))
+
 ## [2.10.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.9.0...vercel-seo-audit-v2.10.0) (2026-10-25)
 
 
