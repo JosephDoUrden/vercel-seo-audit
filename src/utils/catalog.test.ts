@@ -9,16 +9,20 @@ const src = (path: string) => fileURLToPath(new URL(`../${path}`, import.meta.ur
 // Codes in ISSUE_CODES that no module reports yet.
 const UNREPORTED = new Set(['SITEMAP_INVALID_URL']);
 
+// [path, source] for the module sources and the runner.
+function sourceFiles(): [string, string][] {
+  const files = readdirSync(src('audit'))
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'index.ts')
+    .map((f): [string, string] => [`audit/${f}`, f === 'streamed-metadata.ts' ? 'streamedMetadata' : f.replace(/\.ts$/, '')]);
+  files.push(['runner.ts', 'target']);
+  return files;
+}
+
 // (source, category, code) for every finding literal in the module sources and
 // the runner, plus the calls to the shared builders that take a category.
 function emittedRows(): Set<string> {
-  const files = readdirSync(src('audit'))
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'index.ts')
-    .map((f) => [`audit/${f}`, f === 'streamed-metadata.ts' ? 'streamedMetadata' : f.replace(/\.ts$/, '')]);
-  files.push(['runner.ts', 'target']);
-
   const rows = new Set<string>();
-  for (const [path, source] of files) {
+  for (const [path, source] of sourceFiles()) {
     const lines = readFileSync(src(path), 'utf-8').split('\n');
     lines.forEach((line, i) => {
       const code = /code: '([A-Z0-9_]+)'/.exec(line)?.[1];
@@ -42,6 +46,45 @@ function emittedRows(): Set<string> {
   }
   return rows;
 }
+
+// Every severity each code is built with: the literals on the severity line of a
+// finding literal, or the severity argument of a module-local builder. A severity
+// the source computes is recorded as 'unknown'.
+function severitiesByCode(): Map<string, Set<string>> {
+  const severities = new Map<string, Set<string>>();
+  const add = (code: string, found: string[]) => {
+    const set = severities.get(code) ?? new Set<string>();
+    for (const s of found.length > 0 ? found : ['unknown']) set.add(s);
+    severities.set(code, set);
+  };
+  for (const [path] of sourceFiles()) {
+    const lines = readFileSync(src(path), 'utf-8').split('\n');
+    lines.forEach((line, i) => {
+      const code = /code: '([A-Z0-9_]+)'/.exec(line)?.[1];
+      if (code && code !== 'MODULE_FAILED') {
+        const severityLine = lines.slice(i, i + 4).find((l) => /\bseverity\b/.test(l)) ?? '';
+        add(code, [...severityLine.matchAll(/'(error|warning|info|pass)'/g)].map((m) => m[1]));
+      }
+      const local = /\(\w+, '([A-Z0-9_]+)', '(error|warning|info|pass)'/.exec(line);
+      if (local) add(local[1], [local[2]]);
+    });
+  }
+  return severities;
+}
+
+describe('pass codes', () => {
+  it('are never also built at another severity, so a code names one outcome', () => {
+    const shared = [...severitiesByCode()]
+      .filter(([, set]) => set.has('pass') && set.size > 1)
+      .map(([code, set]) => `${code}: ${[...set].sort().join(', ')}`);
+    expect(shared).toEqual([]);
+  });
+
+  it('are found by the scan', () => {
+    const pass = [...severitiesByCode()].filter(([, set]) => set.has('pass')).map(([code]) => code).sort();
+    expect(pass).toEqual(['HTTP_TO_HTTPS_REDIRECT', 'JSONLD_FOUND', 'METADATA_IN_HEAD', 'SITEMAP_FOUND', 'SOFT_404_NONE']);
+  });
+});
 
 describe('ISSUE_DESCRIPTIONS', () => {
   it('has one sentence for every code and nothing else', () => {

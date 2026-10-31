@@ -10,7 +10,7 @@ execution, no source reading, no API keys. Every item below fits inside that.
 ## Phase 1: accuracy and robustness
 
 Found by running v2.10.0 against live sites and a hostile fixture server on 31 Oct 2026.
-All shipped in v2.11.0 (31 Oct 2026) except the last row.
+All shipped in v2.11.0 (31 Oct 2026) except the last row, which shipped after v2.14.0.
 
 | Item | Why | Size |
 |---|---|---|
@@ -22,7 +22,7 @@ All shipped in v2.11.0 (31 Oct 2026) except the last row.
 | Same-origin filter on sitemap `<loc>`, child sitemaps and crawl | A sitemap listing another host makes the tool fetch it, which is an SSRF relay when run in CI | S |
 | Module failures surface in the report | A module that throws today leaves no finding and no exit-code trace | S |
 | Findings use the final URL | `http://` input and apex-to-www moves produce canonical and trailing-slash artefacts | S |
-| Pass findings get their own codes | `SITEMAP_MISSING` with severity `pass` misleads anyone filtering JSON by code. Open | S |
+| Pass findings get their own codes | `SITEMAP_MISSING` with severity `pass` misleads anyone filtering JSON by code. Now `SITEMAP_FOUND` and `JSONLD_FOUND` | S |
 
 ## Phase 2: checks
 

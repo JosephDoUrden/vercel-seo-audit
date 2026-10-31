@@ -1,6 +1,16 @@
-import type { AuditFinding, AuditReport, DiffResult, ModuleId } from '../types.js';
+import type { AuditFinding, AuditReport, DiffResult, IssueCode, ModuleId } from '../types.js';
 
-const toKey = (f: AuditFinding) => `${f.code}::${f.url ?? ''}`;
+// Reports saved before the pass findings got their own codes used the failure
+// code at severity pass. Reading them under the new code keeps a found sitemap
+// in an old report from matching a missing one in the new.
+const LEGACY_PASS_CODES: Partial<Record<IssueCode, IssueCode>> = {
+  SITEMAP_MISSING: 'SITEMAP_FOUND',
+  JSONLD_MISSING: 'JSONLD_FOUND',
+};
+
+const codeOf = (f: AuditFinding) => (f.severity === 'pass' && LEGACY_PASS_CODES[f.code]) || f.code;
+
+const toKey = (f: AuditFinding) => `${codeOf(f)}::${f.url ?? ''}`;
 
 /**
  * Compares two reports by finding code and URL. When either run was limited

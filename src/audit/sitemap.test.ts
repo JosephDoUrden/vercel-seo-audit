@@ -136,6 +136,7 @@ describe('auditSitemap', () => {
     const findings = await auditSitemap(ctx);
     const pass = findings.find((f) => f.severity === 'pass');
     expect(pass).toBeDefined();
+    expect(pass!.code).toBe('SITEMAP_FOUND');
     expect(pass!.message).toContain('1 sitemap');
     expect(ctx.sitemapUrls).toEqual(['https://example.com/page-1']);
   });
@@ -192,6 +193,7 @@ describe('auditSitemap', () => {
     const findings = await auditSitemap(makeCtx());
     const pass = findings.find((f) => f.severity === 'pass');
     expect(pass).toBeDefined();
+    expect(pass!.code).toBe('SITEMAP_FOUND');
     expect(pass!.message).toContain('1 URLs');
   });
 

@@ -102,6 +102,7 @@ describe('auditStructuredData', () => {
 
     const pass = findings.find((f) => f.severity === 'pass');
     expect(pass).toBeDefined();
+    expect(pass!.code).toBe('JSONLD_FOUND');
     expect(pass!.details?.types).toEqual(['Organization']);
   });
 

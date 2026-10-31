@@ -67,7 +67,7 @@ export function generateFixes(findings: AuditFinding[], url: string): FixSuggest
   const fixes: FixSuggestion[] = [];
 
   for (const finding of findings) {
-    if (finding.ignored) continue;
+    if (finding.ignored || finding.severity === 'pass') continue;
     const generator = fixGenerators[finding.code];
     if (generator) {
       const fix = generator(finding, url);

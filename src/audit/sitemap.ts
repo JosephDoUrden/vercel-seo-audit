@@ -340,7 +340,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
 
     if (!malformed) {
       findings.push({
-        code: 'SITEMAP_MISSING',
+        code: 'SITEMAP_FOUND',
         severity: 'pass',
         category: 'sitemap',
         message: `Sitemap index found with ${parsed.sitemaps.length} sitemap(s)`,
@@ -404,7 +404,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
 
   if (errorCount === 0 && sample.length > 0 && !invalid) {
     findings.push({
-      code: 'SITEMAP_MISSING',
+      code: 'SITEMAP_FOUND',
       severity: 'pass',
       category: 'sitemap',
       message: `Sitemap found with ${parsed.urls.length} URLs (${sample.length} sampled, all OK)`,

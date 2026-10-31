@@ -186,7 +186,7 @@ describe('runAudit', () => {
     ]);
     mockSitemap.mockResolvedValue([
       {
-        code: 'SITEMAP_MISSING',
+        code: 'SITEMAP_FOUND',
         severity: 'pass',
         category: 'sitemap',
         message: 'msg',

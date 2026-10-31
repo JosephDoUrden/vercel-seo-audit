@@ -88,6 +88,7 @@ export const ISSUE_CODES = [
   'SITEMAP_LASTMOD_IDENTICAL',
   'SITEMAP_IGNORED_FIELDS',
   'SITEMAP_INDEX_NESTED',
+  'SITEMAP_FOUND',
   // Robots issues
   'ROBOTS_MISSING',
   'ROBOTS_BLOCKS_ALL',
@@ -109,6 +110,7 @@ export const ISSUE_CODES = [
   'JSONLD_MISSING_CONTEXT',
   'JSONLD_MISSING_TYPE',
   'JSONLD_EMPTY_FIELDS',
+  'JSONLD_FOUND',
   // Crawl issues
   'CRAWL_PAGE_ERROR',
   'CRAWL_PAGE_NOINDEX',
@@ -256,6 +258,7 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   JSONLD_MISSING_CONTEXT: 'A JSON-LD block has no @context, so search engines cannot tell which vocabulary it uses.',
   JSONLD_MISSING_TYPE: 'A JSON-LD block or @graph node has no @type, so search engines cannot tell what it describes.',
   JSONLD_EMPTY_FIELDS: 'A JSON-LD node is missing fields its type needs for rich results.',
+  JSONLD_FOUND: 'The page has JSON-LD structured data, and the details list the types it declares.',
   CRAWL_PAGE_ERROR: 'A page from the sitemap could not be fetched, or answered with an error status, during --crawl.',
   CRAWL_PAGE_NOINDEX: 'A page from the sitemap carries a noindex meta tag or header, so the sitemap advertises a page that asks not to be indexed.',
   CRAWL_PAGE_TITLE_MISSING: 'A page from the sitemap has no <title>.',
@@ -321,6 +324,7 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   SITEMAP_LASTMOD_IDENTICAL: 'Every <lastmod> in the sitemap is the same timestamp, so Google learns nothing from them.',
   SITEMAP_IGNORED_FIELDS: 'The sitemap sets <priority> or <changefreq>, which Google ignores.',
   SITEMAP_INDEX_NESTED: 'A sitemap index lists other sitemap index files, which Google does not follow.',
+  SITEMAP_FOUND: 'A sitemap or sitemap index was found and parses; for a sitemap of URLs, every sampled URL also answers without an error.',
   AI_CRAWLER_ACCESS: 'Which AI training, search and user-fetch crawlers robots.txt lets fetch the site root.',
   AI_SEARCH_BOT_BLOCKED: 'robots.txt blocks an AI search crawler while it allows Googlebot, so the site drops out of AI search answers.',
   UA_STATUS_DIFFERS: 'The audited page answers 2xx to the default user agent but a 4xx or 5xx to Googlebot, an HTML-limited bot or another crawler.',
