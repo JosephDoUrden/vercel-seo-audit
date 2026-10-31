@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.14.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.13.0...vercel-seo-audit-v2.14.0) (2026-10-31)
+
+
+### Features
+
+* **crawl:** run the page checks and duplicate detection over crawled pages ([#197](https://github.com/JosephDoUrden/vercel-seo-audit/issues/197)) ([eaf5e55](https://github.com/JosephDoUrden/vercel-seo-audit/commit/eaf5e5560f0bd3c229b94144ed81f501423da4be))
+
 ## [2.13.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.12.0...vercel-seo-audit-v2.13.0) (2026-10-31)
 
 
