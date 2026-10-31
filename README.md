@@ -218,15 +218,19 @@ A limited run says so: the text, Markdown and HTML reports print a `Modules:` li
 The page is fetched once before any module runs.
 
 * Not reachable at all (DNS, TLS, refused connection, timeout): one `TARGET_UNREACHABLE` error
-  with the underlying message in `details.error`. No module runs, and the CLI exits with `2`
-* A 4xx or 5xx status: `TARGET_HTTP_ERROR` (error, `details.status`). The modules still run
+  with the underlying message in `details.error`. No module runs, and the CLI exits with `2`.
+  A redirect loop, or more than 20 redirects, is not that: the modules run and `redirects`
+  reports it
+* A 4xx or 5xx status: `TARGET_HTTP_ERROR` (error, `details.status`). The modules still run.
+  An edge challenge page is reported as `EDGE_CHALLENGE` instead
 * A 2xx response that is not HTML (`content-type` other than `text/html` or
   `application/xhtml+xml`) or has an empty body: `TARGET_NOT_HTML` (warning). The modules that
   read HTML are skipped; `robots`, `redirects`, `sitemap`, `nextjs`, `security`, `vercel` and
   `crawl` still run. A response without a `content-type` is read as HTML
-* Any body is read up to 50 MiB and cut there. The audited page, a sitemap or a crawled page
-  cut that way gets `RESPONSE_TOO_LARGE` (warning, `details.bytes` from `content-length`),
-  and the checks read the part that came in
+* Bodies are cut at 10 MiB, sitemaps at 50 MB (Google's sitemap limit). Googlebot itself reads
+  only the first 2 MB of an HTML file. The audited page, a sitemap or a crawled page cut that
+  way gets `RESPONSE_TOO_LARGE` (warning, `details.bytes` from `content-length`), and the
+  checks read the part that came in
 
 ### Redirects
 
