@@ -168,6 +168,9 @@ export const ISSUE_CODES = [
   'CANONICAL_RELATIVE',
   'CANONICAL_TARGET_NOT_OK',
   'CANONICAL_NOINDEX_CONFLICT',
+  // Which AI crawlers robots.txt lets in
+  'AI_CRAWLER_ACCESS',
+  'AI_SEARCH_BOT_BLOCKED',
 ] as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[number];
@@ -288,6 +291,8 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   SITEMAP_LASTMOD_IDENTICAL: 'Every <lastmod> in the sitemap is the same timestamp, so Google learns nothing from them.',
   SITEMAP_IGNORED_FIELDS: 'The sitemap sets <priority> or <changefreq>, which Google ignores.',
   SITEMAP_INDEX_NESTED: 'A sitemap index lists other sitemap index files, which Google does not follow.',
+  AI_CRAWLER_ACCESS: 'Which AI training, search and user-fetch crawlers robots.txt lets fetch the site root.',
+  AI_SEARCH_BOT_BLOCKED: 'robots.txt blocks an AI search crawler while it allows Googlebot, so the site drops out of AI search answers.',
 };
 
 export interface AuditFinding {

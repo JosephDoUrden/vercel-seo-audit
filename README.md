@@ -271,6 +271,16 @@ The page is fetched once before any module runs.
 * `Disallow: /` (blocks everything)
 * Googlebot-specific blocks
 * Missing `Sitemap:` directive
+* Which AI crawlers may fetch the site root (`AI_CRAWLER_ACCESS`, info), in three columns:
+  training (`GPTBot`, `ClaudeBot`, `Google-Extended`, `Applebot-Extended`, `CCBot`), search
+  (`OAI-SearchBot`, `Claude-SearchBot`, `PerplexityBot`) and user fetch (`ChatGPT-User`,
+  `Claude-User`, `Perplexity-User`). Each crawler follows its own group, or `*` when it has none.
+  `Content-Signal:` lines are copied into the details. Blocking training crawlers is your call
+  and is not flagged.
+* An AI search crawler blocked while Googlebot is allowed (`AI_SEARCH_BOT_BLOCKED`, warning): the
+  site drops out of AI search answers, usually as a side effect of blocking AI bots wholesale.
+  Both read robots.txt only; an edge rule such as the Vercel AI Bots managed ruleset or a
+  Cloudflare bot setting can block crawlers whatever robots.txt says, and the audit cannot see it.
 
 ### Sitemap
 

@@ -103,7 +103,7 @@ describe('auditRobots', () => {
     mockFetchPage.mockResolvedValue(robotsPage(head + '#'.repeat(512_000 - head.length)));
 
     const findings = await auditRobots(makeCtx());
-    expect(findings).toHaveLength(0);
+    expect(findings.map((f) => f.code)).toEqual(['AI_CRAWLER_ACCESS']);
   });
 
   it('counts ROBOTS_TOO_LARGE in UTF-8 bytes, not characters', async () => {
@@ -196,7 +196,7 @@ describe('auditRobots', () => {
     );
 
     const findings = await auditRobots(makeCtx());
-    expect(findings).toHaveLength(0);
+    expect(findings.map((f) => f.code)).toEqual(['AI_CRAWLER_ACCESS']);
   });
 
   it('stores robotsTxt on ctx for cross-module use', async () => {
@@ -227,7 +227,7 @@ describe('auditRobots', () => {
     );
 
     const findings = await auditRobots(makeCtx());
-    expect(findings).toHaveLength(0);
+    expect(findings.map((f) => f.code)).toEqual(['AI_CRAWLER_ACCESS']);
   });
 
   it('handles empty disallow values', async () => {
@@ -366,5 +366,99 @@ describe('auditRobots render assets', () => {
     mockFetchPage.mockResolvedValue(robotsPage('User-agent: *\nDisallow: /_next/\n'));
     expect(codes(await auditRobots(makeCtx()))).toEqual([]);
     expect(mockFetchPage).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('auditRobots AI crawlers', () => {
+  async function run(robots: string) {
+    mockFetchPage.mockResolvedValue(robotsPage(`${robots}\nSitemap: https://example.com/sitemap.xml\n`));
+    const findings = await auditRobots(makeCtx());
+    return {
+      findings,
+      access: findings.find((f) => f.code === 'AI_CRAWLER_ACCESS'),
+      blocked: findings.find((f) => f.code === 'AI_SEARCH_BOT_BLOCKED'),
+    };
+  }
+
+  const allAllowed = {
+    training: { GPTBot: 'allow', ClaudeBot: 'allow', 'Google-Extended': 'allow', 'Applebot-Extended': 'allow', CCBot: 'allow' },
+    search: { 'OAI-SearchBot': 'allow', 'Claude-SearchBot': 'allow', PerplexityBot: 'allow' },
+    user: { 'ChatGPT-User': 'allow', 'Claude-User': 'allow', 'Perplexity-User': 'allow' },
+  };
+
+  it('reports every AI crawler as allowed under a permissive * group', async () => {
+    const { access, blocked } = await run('User-agent: *\nAllow: /');
+    expect(access).toBeDefined();
+    expect(access!.severity).toBe('info');
+    expect(access!.category).toBe('robots');
+    expect(access!.details).toEqual({ ...allAllowed, source: 'robots.txt' });
+    expect(access!.message).toBe('AI crawlers: training 5 allowed, search 3 allowed, user fetch 3 allowed');
+    expect(access!.explanation).toContain('robots.txt only');
+    expect(access!.explanation).toContain('Vercel');
+    expect(access!.explanation).toContain('Cloudflare');
+    expect(blocked).toBeUndefined();
+  });
+
+  it('reports blocked training crawlers without a warning', async () => {
+    const { access, blocked } = await run(
+      'User-agent: GPTBot\nUser-agent: ClaudeBot\nUser-agent: CCBot\nDisallow: /\n\nUser-agent: *\nAllow: /',
+    );
+    expect(access!.details).toMatchObject({
+      training: { GPTBot: 'block', ClaudeBot: 'block', CCBot: 'block', 'Google-Extended': 'allow' },
+      search: allAllowed.search,
+    });
+    expect(access!.message).toBe(
+      'AI crawlers: training 3 blocked and 2 allowed, search 3 allowed, user fetch 3 allowed',
+    );
+    expect(blocked).toBeUndefined();
+  });
+
+  it('warns when a search bot is blocked while Googlebot is allowed', async () => {
+    const { access, blocked } = await run(
+      'User-agent: OAI-SearchBot\nUser-agent: PerplexityBot\nDisallow: /\n\nUser-agent: *\nAllow: /',
+    );
+    expect(access!.details).toMatchObject({
+      search: { 'OAI-SearchBot': 'block', 'Claude-SearchBot': 'allow', PerplexityBot: 'block' },
+    });
+    expect(blocked).toBeDefined();
+    expect(blocked!.severity).toBe('warning');
+    expect(blocked!.category).toBe('robots');
+    expect(blocked!.details).toEqual({ blocked: ['OAI-SearchBot', 'PerplexityBot'] });
+    expect(blocked!.message).toContain('OAI-SearchBot');
+    expect(blocked!.explanation).toContain('legitimate choice');
+  });
+
+  it('does not warn about search bots when Googlebot is blocked too', async () => {
+    const { blocked } = await run('User-agent: *\nDisallow: /');
+    expect(blocked).toBeUndefined();
+  });
+
+  it("lets a crawler's own group override the * group", async () => {
+    const { access, blocked } = await run(
+      'User-agent: *\nDisallow: /\n\nUser-agent: Googlebot\nAllow: /\n\nUser-agent: claude-searchbot\nAllow: /',
+    );
+    expect(access!.details).toMatchObject({
+      search: { 'OAI-SearchBot': 'block', 'Claude-SearchBot': 'allow', PerplexityBot: 'block' },
+      training: { ClaudeBot: 'block' },
+    });
+    expect(blocked!.details).toEqual({ blocked: ['OAI-SearchBot', 'PerplexityBot'] });
+  });
+
+  it('parses Content-Signal lines into details without a finding of their own', async () => {
+    const { findings, access } = await run('User-Agent: *\nContent-Signal: search=yes, ai-train=no\nAllow: /');
+    expect(access!.details).toMatchObject({
+      contentSignal: [{ userAgents: ['*'], signals: { search: 'yes', 'ai-train': 'no' } }],
+    });
+    expect(findings.map((f) => f.code)).toEqual(['AI_CRAWLER_ACCESS']);
+  });
+
+  it('leaves contentSignal out when robots.txt has none', async () => {
+    const { access } = await run('User-agent: *\nAllow: /');
+    expect(access!.details).not.toHaveProperty('contentSignal');
+  });
+
+  it('reports the matrix when robots.txt has no groups at all', async () => {
+    const { access } = await run('');
+    expect(access!.details).toEqual({ ...allAllowed, source: 'robots.txt' });
   });
 });
