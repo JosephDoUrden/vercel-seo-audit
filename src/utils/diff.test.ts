@@ -99,4 +99,16 @@ describe('diffReports', () => {
     expect(diff.newIssues.map((f) => f.code)).toEqual(['TARGET_NOT_HTML']);
     expect(diff.resolvedIssues.map((f) => f.code)).toEqual(['TARGET_HTTP_ERROR']);
   });
+
+  it('reads a pass finding under a failure code from an older report as its pass code', () => {
+    const found = (code: AuditFinding['code']): AuditFinding => ({ ...finding(code), severity: 'pass' });
+    const previous = report([{ module: 'sitemap', findings: [found('SITEMAP_MISSING'), found('JSONLD_MISSING')] }]);
+    const current = report([{ module: 'sitemap', findings: [finding('SITEMAP_MISSING'), found('JSONLD_FOUND')] }]);
+
+    const diff = diffReports(current, previous);
+
+    expect(diff.newIssues.map((f) => f.code)).toEqual(['SITEMAP_MISSING']);
+    expect(diff.resolvedIssues.map((f) => [f.code, f.severity])).toEqual([['SITEMAP_MISSING', 'pass']]);
+    expect(diff.unchanged.map((f) => f.code)).toEqual(['JSONLD_FOUND']);
+  });
 });

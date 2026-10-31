@@ -153,7 +153,7 @@ export async function auditStructuredData(ctx: AuditContext): Promise<AuditFindi
 
   if (detectedTypes.length > 0) {
     findings.push({
-      code: 'JSONLD_MISSING' as const,
+      code: 'JSONLD_FOUND' as const,
       severity: 'pass',
       category: 'structured-data',
       message: `Found structured data: ${detectedTypes.join(', ')}`,

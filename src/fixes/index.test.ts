@@ -25,6 +25,12 @@ describe('generateFixes', () => {
     expect(fixes.map((f) => f.code)).toEqual(['SITEMAP_MISSING']);
   });
 
+  it('skips pass findings', () => {
+    const findings = [makeFinding({ code: 'SITEMAP_MISSING', severity: 'pass', category: 'sitemap' })];
+
+    expect(generateFixes(findings, 'https://example.com')).toEqual([]);
+  });
+
   it('returns fix for ROBOTS_MISSING', () => {
     const findings = [makeFinding({ code: 'ROBOTS_MISSING' })];
     const fixes = generateFixes(findings, 'https://example.com');

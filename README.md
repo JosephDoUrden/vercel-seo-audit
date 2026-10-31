@@ -316,6 +316,8 @@ The page is fetched once before any module runs.
   second, which is what `new Date()` in `app/sitemap.ts` produces (`SITEMAP_LASTMOD_IDENTICAL`),
   `priority` or `changefreq`, which Google ignores (`SITEMAP_IGNORED_FIELDS`), and an index
   that lists another index (`SITEMAP_INDEX_NESTED`)
+* A sitemap that parses with every sampled URL answering, or an index that parses:
+  `SITEMAP_FOUND` (pass). `SITEMAP_MISSING` is only ever the failure
 
 Wherever the audit follows a URL it did not get from you (redirect hops, child sitemaps,
 crawled pages, `og:image` / `twitter:image` / `<img>` probes, hreflang alternates), it refuses
@@ -345,6 +347,8 @@ private address is not caught.
 * Invalid JSON syntax in `<script type="application/ld+json">`
 * Missing `@context` or `@type` properties
 * Missing required fields for known types (Article, FAQPage, Product, Organisation, etc.)
+* JSON-LD present: `JSONLD_FOUND` (pass), with the declared types in `details.types`.
+  `JSONLD_MISSING` is only ever the failure
 
 ### Image SEO
 
