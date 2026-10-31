@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.17.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.16.0...vercel-seo-audit-v2.17.0) (2026-10-31)
+
+
+### Features
+
+* cancellable audits and a sanitised agent format ([#204](https://github.com/JosephDoUrden/vercel-seo-audit/issues/204)) ([80e79b8](https://github.com/JosephDoUrden/vercel-seo-audit/commit/80e79b8d49b33b511d8bc34a002c752a1eafc36e))
+
 ## [2.16.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.15.0...vercel-seo-audit-v2.16.0) (2026-10-31)
 
 
