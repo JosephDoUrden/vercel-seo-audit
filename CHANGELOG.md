@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.15.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.14.0...vercel-seo-audit-v2.15.0) (2026-10-31)
+
+
+### Features
+
+* add an Agent Skill so coding agents can run the audit and fix findings ([#199](https://github.com/JosephDoUrden/vercel-seo-audit/issues/199)) ([e430dc6](https://github.com/JosephDoUrden/vercel-seo-audit/commit/e430dc6330f5424472d1986a5de1b6a5a949da18))
+
+
+### Bug Fixes
+
+* **audit:** give pass findings their own codes ([#201](https://github.com/JosephDoUrden/vercel-seo-audit/issues/201)) ([e6bf396](https://github.com/JosephDoUrden/vercel-seo-audit/commit/e6bf3967d63ff0d2c2437484fee0899e897042fc))
+
 ## [2.14.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.13.0...vercel-seo-audit-v2.14.0) (2026-10-31)
 
 
