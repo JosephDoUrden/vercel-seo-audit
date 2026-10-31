@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.19.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.18.0...vercel-seo-audit-v2.19.0) (2026-10-31)
+
+
+### Features
+
+* **runner:** add maxHtmlBytes and --allow-private ([9f42251](https://github.com/JosephDoUrden/vercel-seo-audit/commit/9f42251e94d5a62e95c1ec349c891e8fe9f36bbb))
+
+
+### Bug Fixes
+
+* **http:** refuse private addresses at connect time, including DNS answers (intranet names are now refused unless --allow-private) ([9f42251](https://github.com/JosephDoUrden/vercel-seo-audit/commit/9f42251e94d5a62e95c1ec349c891e8fe9f36bbb))
+
 ## [2.18.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.17.0...vercel-seo-audit-v2.18.0) (2026-10-31)
 
 
