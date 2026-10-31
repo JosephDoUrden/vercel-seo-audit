@@ -24,8 +24,9 @@ findings, explanations and timings, and its shape can change. Read `--format age
 
 Findings come sorted error, warning, info, then in module run order. Pass and ignored findings are
 left out, except an ignored `TARGET_UNREACHABLE`, which stays because the run still exits 2. `fix`
-is the suggested change, or `null`. `details` is capped (10 array items, 200 characters a string)
-and `truncated` is `true` when anything was cut. `skipped` lists the modules that did not run, from
+is the suggested change, or `null`. `message` and `fix` are capped at 500 characters, `details` at
+10 array items and 200 characters a string, and `truncated` is `true` when anything was cut. Control
+characters (other than tab and newline) and bidi overrides are stripped from every string. `skipped` lists the modules that did not run, from
 `--only`, a non-HTML page or an unreachable one, or `crawl` unless `--crawl` is set. With `--diff
 old.json` the comparison goes under a `diff` key, so stdout is still one JSON document. `--fix` is
 refused with `--format agent`; the fix text is already in each finding.

@@ -49,6 +49,37 @@ function abortAt(controller: AbortController, deadline: number, url: string, opt
   );
 }
 
+// The caller's signal (`opts.signal`) reaches every request two ways: a request
+// is never started once it has fired, and one in flight is aborted with it. A
+// listener is used rather than AbortSignal.any() so it can be removed when the
+// request is done; a crawl makes hundreds of requests against one signal.
+function throwIfAborted(opts?: FetchOptions): void {
+  opts?.signal?.throwIfAborted();
+}
+
+// Aborts `controller` when the caller's signal fires, with the caller's reason.
+// Returns the function that unhooks it.
+function follow(controller: AbortController, opts?: FetchOptions): () => void {
+  const signal = opts?.signal;
+  if (!signal) return () => undefined;
+  const onAbort = (): void => controller.abort(signal.reason);
+  signal.addEventListener('abort', onAbort, { once: true });
+  return () => signal.removeEventListener('abort', onAbort);
+}
+
+// A promise that rejects with the caller's reason when `signal` fires, for racing
+// a read that no controller covers any more. `stop` unhooks it.
+function whenAborted(signal: AbortSignal): { aborted: Promise<never>; stop: () => void } {
+  let stop = (): void => undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    const onAbort = (): void => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    stop = () => signal.removeEventListener('abort', onAbort);
+  });
+  return { aborted, stop };
+}
+
 /** A redirect walk that went round in a circle (`loop`) or ran past MAX_REDIRECTS (`limit`). */
 export class RedirectError extends Error {
   constructor(
@@ -75,8 +106,10 @@ const hopControllers = new WeakMap<Response, AbortController>();
 
 function fetchHop(url: string, opts: FetchOptions | undefined, deadline: number): Promise<Response> {
   return cached(opts, `MANUAL ${url}`, async () => {
+    throwIfAborted(opts);
     const controller = new AbortController();
     const timer = abortAt(controller, deadline, url, opts);
+    const unfollow = follow(controller, opts);
 
     try {
       const res = await fetch(url, {
@@ -88,6 +121,7 @@ function fetchHop(url: string, opts: FetchOptions | undefined, deadline: number)
       return res;
     } finally {
       clearTimeout(timer);
+      unfollow();
     }
   });
 }
@@ -164,8 +198,9 @@ type BodyResult = { body: string; truncated?: true };
 // body is read through a reader with what is left of the deadline. On timeout
 // the hop's controller is aborted and the reader cancelled, which closes the
 // socket; `res.text()` would have locked the stream and left it open. Reading
-// stops at `maxBytes` the same way, keeping what came before the cap.
-async function readBody(res: Response, deadline: number, maxBytes: number): Promise<BodyResult> {
+// stops at `maxBytes` the same way, keeping what came before the cap, and at the
+// caller's abort, which tears the connection down like a timeout.
+async function readBody(res: Response, deadline: number, maxBytes: number, signal?: AbortSignal): Promise<BodyResult> {
   if (!res.body) return { body: '' };
 
   const reader = res.body.getReader();
@@ -177,6 +212,8 @@ async function readBody(res: Response, deadline: number, maxBytes: number): Prom
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`Timed out reading body of ${res.url}`)), remaining(deadline));
   });
+  const caller = signal ? whenAborted(signal) : undefined;
+  const stops = caller ? [expired, caller.aborted] : [expired];
 
   const close = async (): Promise<void> => {
     hopControllers.get(res)?.abort();
@@ -185,7 +222,7 @@ async function readBody(res: Response, deadline: number, maxBytes: number): Prom
 
   try {
     for (;;) {
-      const { done, value } = await Promise.race([reader.read(), expired]);
+      const { done, value } = await Promise.race([reader.read(), ...stops]);
       if (done) break;
       if (bytes + value.byteLength > maxBytes) {
         chunks.push(decoder.decode(value.subarray(0, maxBytes - bytes), { stream: true }));
@@ -203,6 +240,7 @@ async function readBody(res: Response, deadline: number, maxBytes: number): Prom
     throw err;
   } finally {
     clearTimeout(timer);
+    caller?.stop();
   }
 }
 
@@ -211,8 +249,10 @@ type PageResult = BodyResult & { status: number; headers: Headers };
 const maxBytesOf = (opts?: FetchOptions): number => opts?.maxBytes ?? MAX_HTML_BYTES;
 
 async function fetchFollowing(url: string, opts: FetchOptions | undefined, deadline: number): Promise<PageResult> {
+  throwIfAborted(opts);
   const controller = new AbortController();
   const timer = abortAt(controller, deadline, url, opts);
+  const unfollow = follow(controller, opts);
 
   try {
     // Manual, like every request here: native redirects would skip the
@@ -228,9 +268,10 @@ async function fetchFollowing(url: string, opts: FetchOptions | undefined, deadl
     // main path instead of a bare abort.
     clearTimeout(timer);
     hopControllers.set(res, controller);
-    return { ...(await readBody(res, deadline, maxBytesOf(opts))), status: res.status, headers: res.headers };
+    return { ...(await readBody(res, deadline, maxBytesOf(opts), opts?.signal)), status: res.status, headers: res.headers };
   } finally {
     clearTimeout(timer);
+    unfollow();
   }
 }
 
@@ -257,7 +298,7 @@ export function fetchPage(
     // body some other caller has consumed falls through to a fresh GET.
     const page = await cached(opts, `PAGE ${finalUrl}`, async (): Promise<PageResult> => {
       if (!response.bodyUsed) {
-        return { ...(await readBody(response, deadline, maxBytesOf(opts))), status: response.status, headers: response.headers };
+        return { ...(await readBody(response, deadline, maxBytesOf(opts), opts?.signal)), status: response.status, headers: response.headers };
       }
       return fetchFollowing(finalUrl, opts, deadline);
     });
@@ -273,6 +314,7 @@ export function fetchHead(
   return cached(opts, `HEAD ${url}`, async () => {
     const controller = new AbortController();
     const timer = abortAt(controller, deadlineFor(opts), url, opts);
+    const unfollow = follow(controller, opts);
 
     // Redirects are walked here rather than by fetch, so each hop can be
     // checked before it is requested.
@@ -281,6 +323,7 @@ export function fetchHead(
       if (reachesPrivateAddress(url, from)) throw refused(url);
       let current = url;
       for (let i = 0; ; i++) {
+        throwIfAborted(opts);
         const res = await fetch(current, {
           method: 'HEAD',
           redirect: 'manual',
@@ -299,6 +342,7 @@ export function fetchHead(
       }
     } finally {
       clearTimeout(timer);
+      unfollow();
     }
   });
 }

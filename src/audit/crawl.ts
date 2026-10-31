@@ -63,6 +63,8 @@ export async function auditCrawl(ctx: AuditContext): Promise<AuditFinding[]> {
 
   // Process in batches of CRAWL_CONCURRENCY
   for (let i = 0; i < urls.length; i += CRAWL_CONCURRENCY) {
+    // An aborted audit is rejected by runAudit; the rest of the sitemap is not worth a line each.
+    if (ctx.fetchOptions.signal?.aborted) break;
     const batch = urls.slice(i, i + CRAWL_CONCURRENCY);
     const results = await Promise.allSettled(
       batch.map(async (pageUrl, batchIdx) => {
@@ -168,9 +170,9 @@ async function auditPage(
   let finalUrl: string;
   // Each crawled page is fetched once, so the audit cache would only pin every
   // body in memory until the audit ends.
-  const { timeout, userAgent } = ctx.fetchOptions;
+  const { timeout, userAgent, signal } = ctx.fetchOptions;
   try {
-    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl });
+    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl, signal });
     body = res.body;
     status = res.status;
     headers = res.headers;

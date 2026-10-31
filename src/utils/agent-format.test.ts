@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MODULE_IDS } from '../types.js';
 import type { AuditFinding, AuditReport } from '../types.js';
-import { buildAgentReport, formatAgent, resolveFormat, MAX_DETAIL_CHARS, MAX_DETAIL_ITEMS } from './agent-format.js';
+import { buildAgentReport, formatAgent, resolveFormat, MAX_DETAIL_CHARS, MAX_DETAIL_ITEMS, MAX_TEXT_CHARS } from './agent-format.js';
 import { diffReports } from './diff.js';
 
 function finding(overrides: Partial<AuditFinding>): AuditFinding {
@@ -129,6 +129,55 @@ describe('buildAgentReport', () => {
       finding({ code: 'SITEMAP_CROSS_HOST_URLS', severity: 'warning', category: 'sitemap', details: { examples: ['/a'] } }),
     ] }]);
     expect(buildAgentReport(r, opts).truncated).toBe(false);
+  });
+
+  it('caps message and fix, which quote the page, and says so', () => {
+    const long = 'Title "' + 'x'.repeat(MAX_TEXT_CHARS) + '" is too long';
+    const r = report([{ module: 'metadata', findings: [finding({ message: long, suggestion: long })] }]);
+    const out = buildAgentReport(r, opts);
+    expect(out.findings[0].message).toBe(long.slice(0, MAX_TEXT_CHARS));
+    expect(out.findings[0].fix).toBe(long.slice(0, MAX_TEXT_CHARS));
+    expect(out.truncated).toBe(true);
+  });
+
+  it('leaves message and fix whole at the cap', () => {
+    const exact = 'x'.repeat(MAX_TEXT_CHARS);
+    const r = report([{ module: 'metadata', findings: [finding({ message: exact, suggestion: exact })] }]);
+    const out = buildAgentReport(r, opts);
+    expect(out.findings[0].message).toBe(exact);
+    expect(out.findings[0].fix).toBe(exact);
+    expect(out.truncated).toBe(false);
+  });
+
+  it('strips C0 controls and bidi overrides from every string, keeping tabs and newlines', () => {
+    const planted = 'a\u0000b\u001B[31mc\rd\u007F\te\nf‮g⁦h⁩i‪j';
+    const kept = 'ab[31mcd\u007F\te\nfghij';
+    const r = report(
+      [{ module: 'metadata', findings: [finding({
+        message: planted,
+        suggestion: planted,
+        url: `https://example.com/${planted}`,
+        details: { title: planted, list: [planted], [`key${planted}`]: 1 },
+      })] }],
+      { url: `https://example.com/‮`, page: { status: 200, finalUrl: 'https://example.com/\u0007', nextjs: true } },
+    );
+    const out = buildAgentReport(r, opts);
+    const [f] = out.findings;
+    expect(f.message).toBe(kept);
+    expect(f.fix).toBe(kept);
+    expect(f.url).toBe(`https://example.com/${kept}`);
+    expect(f.details).toEqual({ title: kept, list: [kept], [`key${kept}`]: 1 });
+    expect(out.url).toBe('https://example.com/');
+    expect(out.finalUrl).toBe('https://example.com/');
+    expect(out.truncated).toBe(false);
+  });
+
+  it('strips before it caps, so the characters it removes do not count', () => {
+    const message = '‮'.repeat(10) + 'x'.repeat(MAX_TEXT_CHARS);
+    const r = report([{ module: 'metadata', findings: [finding({ message })] }]);
+    const out = buildAgentReport(r, opts);
+    expect(out.findings[0].message).toBe('x'.repeat(MAX_TEXT_CHARS));
+    expect(out.truncated).toBe(false);
   });
 
   it('lists the modules that did not run as skipped', () => {
