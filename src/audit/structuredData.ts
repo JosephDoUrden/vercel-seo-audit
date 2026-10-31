@@ -12,6 +12,12 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   LocalBusiness: ['name', 'address'],
 };
 
+/** JSON-LD allows `@type` to be a string or an array of strings; anything else counts as no type. */
+function normaliseTypes(value: unknown): string[] {
+  const candidates = Array.isArray(value) ? value : [value];
+  return candidates.filter((t): t is string => typeof t === 'string' && t !== '');
+}
+
 export async function auditStructuredData(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
   const { normalizedUrl, fetchOptions } = ctx;
@@ -90,13 +96,15 @@ export async function auditStructuredData(ctx: AuditContext): Promise<AuditFindi
 
       // A top-level @graph carries the typed nodes; the wrapper itself has no @type.
       const graph = record['@graph'];
-      const isGraph = !record['@type'] && Array.isArray(graph) && graph.length > 0;
+      const isGraph = normaliseTypes(record['@type']).length === 0 && Array.isArray(graph) && graph.length > 0;
       const nodes: unknown[] = isGraph ? graph : [record];
 
       for (const [index, node] of nodes.entries()) {
         const entity = (typeof node === 'object' && node !== null ? node : {}) as Record<string, unknown>;
 
-        if (!entity['@type']) {
+        const types = normaliseTypes(entity['@type']);
+
+        if (types.length === 0) {
           findings.push({
             code: 'JSONLD_MISSING_TYPE',
             severity: 'warning',
@@ -111,11 +119,12 @@ export async function auditStructuredData(ctx: AuditContext): Promise<AuditFindi
           continue;
         }
 
-        const type = String(entity['@type']);
-        detectedTypes.push(type);
+        detectedTypes.push(...types);
 
-        const required = REQUIRED_FIELDS[type];
-        if (required) {
+        for (const type of types) {
+          const required = REQUIRED_FIELDS[type];
+          if (!required) continue;
+
           const missing = required.filter((field) => {
             const value = entity[field];
             if (value === undefined || value === null || value === '') return true;
@@ -133,7 +142,7 @@ export async function auditStructuredData(ctx: AuditContext): Promise<AuditFindi
                 `The ${type} schema is missing fields that Google expects for rich result eligibility.`,
               suggestion:
                 `Add the missing properties: ${missing.join(', ')}. See https://schema.org/${type} for details.`,
-              details: { type, missingFields: missing },
+              details: { type, missingFields: missing, ...(isGraph && { graphIndex: index }) },
               url: normalizedUrl,
             });
           }

@@ -186,6 +186,80 @@ describe('auditStructuredData', () => {
     }
   });
 
+  it('splits an @type array into its member types', async () => {
+    const ctx = makeCtx(wrap(JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': ['Person', 'Organization'],
+    })));
+    const findings = await auditStructuredData(ctx);
+
+    expect(findings.find((f) => f.severity === 'pass')!.details?.types).toEqual(['Person', 'Organization']);
+    const empty = findings.filter((f) => f.code === 'JSONLD_EMPTY_FIELDS');
+    expect(empty).toHaveLength(1);
+    expect(empty[0].details).toEqual({ type: 'Organization', missingFields: ['name'] });
+  });
+
+  it('checks required fields for every listed type on an @graph node', async () => {
+    const ctx = makeCtx(wrap(JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'WebSite', name: 'Test', url: 'https://example.com' },
+        { '@type': ['Organization', 'LocalBusiness'] },
+      ],
+    })));
+    const findings = await auditStructuredData(ctx);
+
+    expect(findings.find((f) => f.severity === 'pass')!.details?.types).toEqual([
+      'WebSite',
+      'Organization',
+      'LocalBusiness',
+    ]);
+    const empty = findings.filter((f) => f.code === 'JSONLD_EMPTY_FIELDS');
+    expect(empty.map((f) => f.details)).toEqual([
+      { type: 'Organization', missingFields: ['name'], graphIndex: 1 },
+      { type: 'LocalBusiness', missingFields: ['name', 'address'], graphIndex: 1 },
+    ]);
+  });
+
+  it('includes graphIndex so two @graph nodes of the same type can be told apart', async () => {
+    const ctx = makeCtx(wrap(JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'WebSite', name: 'Test', url: 'https://example.com' },
+        { '@type': 'WebSite', name: 'Test' },
+      ],
+    })));
+    const findings = await auditStructuredData(ctx);
+
+    const empty = findings.filter((f) => f.code === 'JSONLD_EMPTY_FIELDS');
+    expect(empty).toHaveLength(1);
+    expect(empty[0].details).toEqual({ type: 'WebSite', missingFields: ['url'], graphIndex: 1 });
+  });
+
+  it('drops non-string members of an @type array', async () => {
+    const ctx = makeCtx(wrap(JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': ['Organization', 42, null, { '@id': 'x' }],
+      name: 'Acme',
+    })));
+    const findings = await auditStructuredData(ctx);
+
+    expect(findings.find((f) => f.code === 'JSONLD_MISSING_TYPE')).toBeUndefined();
+    expect(findings.find((f) => f.code === 'JSONLD_EMPTY_FIELDS')).toBeUndefined();
+    expect(findings.find((f) => f.severity === 'pass')!.details?.types).toEqual(['Organization']);
+  });
+
+  it('reports JSONLD_MISSING_TYPE when @type has no usable string', async () => {
+    for (const type of [[], [42, null], 42, { name: 'Person' }]) {
+      const findings = await auditStructuredData(makeCtx(wrap(JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': type,
+      }))));
+      expect(findings.find((f) => f.code === 'JSONLD_MISSING_TYPE')!.message).toBe('JSON-LD block missing @type');
+      expect(findings.find((f) => f.severity === 'pass')).toBeUndefined();
+    }
+  });
+
   it('does not report empty fields for unknown @type', async () => {
     const ctx = makeCtx(wrap(JSON.stringify({
       '@context': 'https://schema.org',
