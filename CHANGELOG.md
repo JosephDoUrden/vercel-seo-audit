@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.12.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.11.0...vercel-seo-audit-v2.12.0) (2026-10-31)
+
+
+### Features
+
+* **cli:** add --format agent, the explain command and AGENTS.md ([#189](https://github.com/JosephDoUrden/vercel-seo-audit/issues/189)) ([b3ce1b6](https://github.com/JosephDoUrden/vercel-seo-audit/commit/b3ce1b6cc4f739934985600e55c053071bf5034c))
+* **metadata:** check the canonical the way Google reads it ([#186](https://github.com/JosephDoUrden/vercel-seo-audit/issues/186)) ([e89aac4](https://github.com/JosephDoUrden/vercel-seo-audit/commit/e89aac4f03ac438bb81b66138fece7fff917b472))
+* **performance:** flag content Googlebot never reads past its 2 MB limit and heavy RSC payloads ([#191](https://github.com/JosephDoUrden/vercel-seo-audit/issues/191)) ([f9e1fde](https://github.com/JosephDoUrden/vercel-seo-audit/commit/f9e1fde50e0c95cc3eaede40420c4b73422f29ce))
+* **redirects:** report when the audited URL itself redirects elsewhere ([#190](https://github.com/JosephDoUrden/vercel-seo-audit/issues/190)) ([335e74c](https://github.com/JosephDoUrden/vercel-seo-audit/commit/335e74c9ba83e748d90f341e207a9ac63a1b142f))
+* **robots:** report which AI crawlers robots.txt allows, and flag a blocked search bot ([#192](https://github.com/JosephDoUrden/vercel-seo-audit/issues/192)) ([18b5102](https://github.com/JosephDoUrden/vercel-seo-audit/commit/18b51029e78d3a28bb8cc9bb85dd6fd63e88c4a2))
+* **sitemap:** validate sitemaps the way Google reads them ([#187](https://github.com/JosephDoUrden/vercel-seo-audit/issues/187)) ([c84369a](https://github.com/JosephDoUrden/vercel-seo-audit/commit/c84369ae9a02f367e55ae7e2bae0f06b4aacba4e))
+
 ## [2.11.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.10.0...vercel-seo-audit-v2.11.0) (2026-10-31)
 
 
