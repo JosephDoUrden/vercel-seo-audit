@@ -23,6 +23,11 @@ export const HTML_LIMITED_BOT_UA_RE =
 export const DEFAULT_CRAWL_LIMIT = 50;
 export const CRAWL_CONCURRENCY = 5;
 
+// "Google enforces a robots.txt file size limit of 500 kibibytes (KiB). Content which is
+// after the maximum file size is ignored."
+// https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec, updated 23 Oct 2026.
+export const ROBOTS_TXT_MAX_BYTES = 500 * 1024;
+
 export const DEFAULT_PATHS = {
   robotsTxt: '/robots.txt',
   sitemapXml: '/sitemap.xml',

@@ -48,6 +48,76 @@ describe('auditRobots', () => {
     expect(findings[0].severity).toBe('warning');
   });
 
+  it.each([401, 403, 410])('reports ROBOTS_MISSING with no restrictions for %i', async (status) => {
+    mockFetchPage.mockResolvedValue({
+      body: '',
+      status,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/robots.txt',
+    });
+
+    const findings = await auditRobots(makeCtx());
+    expect(findings).toHaveLength(1);
+    expect(findings[0].code).toBe('ROBOTS_MISSING');
+    expect(findings[0].severity).toBe('warning');
+    expect(findings[0].message).toContain(String(status));
+    expect(findings[0].explanation).toContain('no crawl restrictions');
+    expect(findings[0].details).toEqual({ status });
+  });
+
+  it.each([500, 503, 429])('reports ROBOTS_SERVER_ERROR for %i', async (status) => {
+    mockFetchPage.mockResolvedValue({
+      body: 'oops',
+      status,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/robots.txt',
+    });
+
+    const ctx = makeCtx();
+    const findings = await auditRobots(ctx);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].code).toBe('ROBOTS_SERVER_ERROR');
+    expect(findings[0].severity).toBe('error');
+    expect(findings[0].message).toContain('paused');
+    expect(findings[0].explanation).toContain('12 hours');
+    expect(findings[0].explanation).toContain('30 days');
+    expect(findings[0].details).toEqual({ status });
+    expect(ctx.robotsTxt).toBeUndefined();
+  });
+
+  it('reports ROBOTS_TOO_LARGE past 500 KiB and still checks the rules', async () => {
+    const head = 'User-agent: *\nDisallow: /\nSitemap: https://example.com/sitemap.xml\n';
+    const body = head + '#'.repeat(512_001 - head.length);
+    mockFetchPage.mockResolvedValue(robotsPage(body));
+
+    const findings = await auditRobots(makeCtx());
+    const tooLarge = findings.find((f) => f.code === 'ROBOTS_TOO_LARGE');
+    expect(tooLarge).toBeDefined();
+    expect(tooLarge!.severity).toBe('warning');
+    expect(tooLarge!.details).toEqual({ bytes: 512_001, limit: 512_000 });
+    expect(findings.find((f) => f.code === 'ROBOTS_BLOCKS_ALL')).toBeDefined();
+  });
+
+  it('does not report ROBOTS_TOO_LARGE at exactly 500 KiB', async () => {
+    const head = 'User-agent: *\nAllow: /\nSitemap: https://example.com/sitemap.xml\n';
+    mockFetchPage.mockResolvedValue(robotsPage(head + '#'.repeat(512_000 - head.length)));
+
+    const findings = await auditRobots(makeCtx());
+    expect(findings).toHaveLength(0);
+  });
+
+  it('counts ROBOTS_TOO_LARGE in UTF-8 bytes, not characters', async () => {
+    const head = 'User-agent: *\nAllow: /\nSitemap: https://example.com/sitemap.xml\n';
+    // 'é' is two bytes in UTF-8, so this is under the limit in characters but over it in bytes.
+    const body = head + '#'.repeat(256_000);
+    const padded = body + 'é'.repeat(Math.ceil((512_001 - body.length) / 2));
+    mockFetchPage.mockResolvedValue(robotsPage(padded));
+
+    const findings = await auditRobots(makeCtx());
+    expect(padded.length).toBeLessThan(512_000);
+    expect(findings.find((f) => f.code === 'ROBOTS_TOO_LARGE')).toBeDefined();
+  });
+
   it('reports ROBOTS_MISSING when fetch throws', async () => {
     mockFetchPage.mockRejectedValue(new Error('Network error'));
 
