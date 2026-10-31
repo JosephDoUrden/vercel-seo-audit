@@ -88,45 +88,55 @@ export async function auditStructuredData(ctx: AuditContext): Promise<AuditFindi
         });
       }
 
-      if (!record['@type']) {
-        findings.push({
-          code: 'JSONLD_MISSING_TYPE',
-          severity: 'warning',
-          category: 'structured-data',
-          message: 'JSON-LD block missing @type',
-          explanation:
-            'Without @type, search engines cannot determine what kind of entity the data describes.',
-          suggestion: 'Add an @type property (e.g. "WebSite", "Organization", "Article").',
-          url: normalizedUrl,
-        });
-        continue;
-      }
+      // A top-level @graph carries the typed nodes; the wrapper itself has no @type.
+      const graph = record['@graph'];
+      const isGraph = !record['@type'] && Array.isArray(graph) && graph.length > 0;
+      const nodes: unknown[] = isGraph ? graph : [record];
 
-      const type = String(record['@type']);
-      detectedTypes.push(type);
+      for (const [index, node] of nodes.entries()) {
+        const entity = (typeof node === 'object' && node !== null ? node : {}) as Record<string, unknown>;
 
-      const required = REQUIRED_FIELDS[type];
-      if (required) {
-        const missing = required.filter((field) => {
-          const value = record[field];
-          if (value === undefined || value === null || value === '') return true;
-          if (Array.isArray(value) && value.length === 0) return true;
-          return false;
-        });
-
-        if (missing.length > 0) {
+        if (!entity['@type']) {
           findings.push({
-            code: 'JSONLD_EMPTY_FIELDS',
+            code: 'JSONLD_MISSING_TYPE',
             severity: 'warning',
             category: 'structured-data',
-            message: `JSON-LD ${type} missing required fields: ${missing.join(', ')}`,
+            message: isGraph ? `JSON-LD @graph node ${index} missing @type` : 'JSON-LD block missing @type',
             explanation:
-              `The ${type} schema is missing fields that Google expects for rich result eligibility.`,
-            suggestion:
-              `Add the missing properties: ${missing.join(', ')}. See https://schema.org/${type} for details.`,
-            details: { type, missingFields: missing },
+              'Without @type, search engines cannot determine what kind of entity the data describes.',
+            suggestion: 'Add an @type property (e.g. "WebSite", "Organization", "Article").',
+            ...(isGraph && { details: { graphIndex: index } }),
             url: normalizedUrl,
           });
+          continue;
+        }
+
+        const type = String(entity['@type']);
+        detectedTypes.push(type);
+
+        const required = REQUIRED_FIELDS[type];
+        if (required) {
+          const missing = required.filter((field) => {
+            const value = entity[field];
+            if (value === undefined || value === null || value === '') return true;
+            if (Array.isArray(value) && value.length === 0) return true;
+            return false;
+          });
+
+          if (missing.length > 0) {
+            findings.push({
+              code: 'JSONLD_EMPTY_FIELDS',
+              severity: 'warning',
+              category: 'structured-data',
+              message: `JSON-LD ${type} missing required fields: ${missing.join(', ')}`,
+              explanation:
+                `The ${type} schema is missing fields that Google expects for rich result eligibility.`,
+              suggestion:
+                `Add the missing properties: ${missing.join(', ')}. See https://schema.org/${type} for details.`,
+              details: { type, missingFields: missing },
+              url: normalizedUrl,
+            });
+          }
         }
       }
     }

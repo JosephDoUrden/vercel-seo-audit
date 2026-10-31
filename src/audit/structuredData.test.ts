@@ -130,6 +130,62 @@ describe('auditStructuredData', () => {
     expect(pass!.details?.types).toEqual(['WebSite', 'Organization']);
   });
 
+  it('accepts a top-level @graph whose nodes all carry @type', async () => {
+    const ctx = makeCtx(wrap(JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'Person', name: 'Jane Doe' },
+        { '@type': 'WebSite', name: 'Test', url: 'https://example.com' },
+      ],
+    })));
+    const findings = await auditStructuredData(ctx);
+
+    expect(findings.find((f) => f.code === 'JSONLD_MISSING_TYPE')).toBeUndefined();
+    expect(findings.find((f) => f.code === 'JSONLD_MISSING_CONTEXT')).toBeUndefined();
+    const pass = findings.find((f) => f.severity === 'pass');
+    expect(pass!.details?.types).toEqual(['Person', 'WebSite']);
+  });
+
+  it('checks required fields on @graph nodes', async () => {
+    const ctx = makeCtx(wrap(JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [{ '@type': 'WebSite', name: 'Test' }],
+    })));
+    const findings = await auditStructuredData(ctx);
+
+    const empty = findings.find((f) => f.code === 'JSONLD_EMPTY_FIELDS');
+    expect(empty!.details?.missingFields).toEqual(['url']);
+  });
+
+  it('reports JSONLD_MISSING_TYPE for an untyped @graph node, naming its index', async () => {
+    const ctx = makeCtx(wrap(JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'Person', name: 'Jane Doe' },
+        { name: 'Test', url: 'https://example.com' },
+      ],
+    })));
+    const findings = await auditStructuredData(ctx);
+
+    const missing = findings.filter((f) => f.code === 'JSONLD_MISSING_TYPE');
+    expect(missing).toHaveLength(1);
+    expect(missing[0].message).toBe('JSON-LD @graph node 1 missing @type');
+    expect(missing[0].details).toEqual({ graphIndex: 1 });
+    expect(findings.find((f) => f.severity === 'pass')!.details?.types).toEqual(['Person']);
+  });
+
+  it('reports JSONLD_MISSING_TYPE for a block with neither @type nor a usable @graph', async () => {
+    for (const block of [
+      { '@context': 'https://schema.org', name: 'Test' },
+      { '@context': 'https://schema.org', '@graph': [] },
+      { '@context': 'https://schema.org', '@graph': { '@type': 'Person' } },
+    ]) {
+      const findings = await auditStructuredData(makeCtx(wrap(JSON.stringify(block))));
+      const missing = findings.find((f) => f.code === 'JSONLD_MISSING_TYPE');
+      expect(missing!.message).toBe('JSON-LD block missing @type');
+    }
+  });
+
   it('does not report empty fields for unknown @type', async () => {
     const ctx = makeCtx(wrap(JSON.stringify({
       '@context': 'https://schema.org',
