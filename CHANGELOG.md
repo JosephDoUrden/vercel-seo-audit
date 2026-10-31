@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.16.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.15.0...vercel-seo-audit-v2.16.0) (2026-10-31)
+
+
+### Features
+
+* export a programmatic API alongside the CLI ([#202](https://github.com/JosephDoUrden/vercel-seo-audit/issues/202)) ([74d14a4](https://github.com/JosephDoUrden/vercel-seo-audit/commit/74d14a4048d25dc4c7693affeb5589e946770dff))
+
 ## [2.15.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.14.0...vercel-seo-audit-v2.15.0) (2026-10-31)
 
 
