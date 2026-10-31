@@ -8,6 +8,7 @@ export interface SeoAuditConfig {
   timeout?: number;
   ignore?: string[];
   only?: string[];
+  skipPacks?: string[];
   format?: OutputFormat;
 }
 
@@ -382,6 +383,35 @@ export const MODULE_IDS = [
 
 export type ModuleId = (typeof MODULE_IDS)[number];
 
+/** The packs that `--skip-pack` can leave out. A module in neither is generic: it reads any site. */
+export const MODULE_PACK_IDS = ['vercel', 'nextjs'] as const;
+
+export type ModulePack = (typeof MODULE_PACK_IDS)[number];
+
+/**
+ * The pack each module belongs to. The runner tags its modules with the same
+ * packs, and runner.test.ts checks the two agree.
+ */
+export const MODULE_PACKS: Record<ModuleId, ModulePack | 'generic'> = {
+  robots: 'generic',
+  redirects: 'generic',
+  sitemap: 'generic',
+  metadata: 'generic',
+  favicon: 'generic',
+  nextjs: 'nextjs',
+  structuredData: 'generic',
+  i18n: 'generic',
+  images: 'generic',
+  security: 'generic',
+  performance: 'generic',
+  vercel: 'vercel',
+  streamedMetadata: 'nextjs',
+  hostLeak: 'generic',
+  uaParity: 'generic',
+  soft404: 'generic',
+  crawl: 'generic',
+};
+
 export interface AuditModuleResult {
   module: string;
   findings: AuditFinding[];
@@ -402,6 +432,8 @@ export interface AuditReport {
   modules: AuditModuleResult[];
   /** The modules that ran when the audit was limited with `--only`, dependencies included. Absent on a full run. */
   only?: ModuleId[];
+  /** The modules `--skip-pack` left out of this run. Absent when it left none out. */
+  skippedByPack?: ModuleId[];
   /**
    * The audited page as the up-front fetch saw it. Always set by `runAudit`; optional only so
    * reports saved by older versions still load for `--diff`.

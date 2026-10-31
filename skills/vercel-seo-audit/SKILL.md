@@ -26,6 +26,9 @@ so when you report.
    npx vercel-seo-audit https://your-site.com --format agent
    ```
 
+   On a site that is not on Vercel, add `--skip-pack vercel`:
+   `npx vercel-seo-audit https://your-site.com --format agent --skip-pack vercel`.
+
    stdout is one line of JSON. Read `exitCode`, `summary` and `findings`. Findings come sorted
    error, then warning, then info. Each one has `code`, `severity`, `message`, `url`, `fix` and
    `details`.

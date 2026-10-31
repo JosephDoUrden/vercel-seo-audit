@@ -147,6 +147,15 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ only: [] })).toThrow('Error in .seoauditrc.json: "only" must list at least one module');
   });
 
+  it('accepts skipPacks as an array of strings', () => {
+    expect(validateConfig({ skipPacks: ['vercel'] }).skipPacks).toEqual(['vercel']);
+  });
+
+  it('throws when skipPacks is not an array of strings', () => {
+    expect(() => validateConfig({ skipPacks: 'vercel' })).toThrow('Error in .seoauditrc.json: "skipPacks" must be an array of strings');
+    expect(() => validateConfig({ skipPacks: ['vercel', 1] })).toThrow('"skipPacks" must be an array of strings');
+  });
+
   it('accepts format text or agent', () => {
     expect(validateConfig({ format: 'agent' }).format).toBe('agent');
     expect(validateConfig({ format: 'text' }).format).toBe('text');

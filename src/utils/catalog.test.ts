@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ISSUE_CODES, ISSUE_DESCRIPTIONS, MODULE_IDS } from '../types.js';
-import { closestCodes, describeCode, explain, sourceRows } from './catalog.js';
+import { ISSUE_CODES, ISSUE_DESCRIPTIONS, MODULE_IDS, MODULE_PACKS } from '../types.js';
+import { closestCodes, describeCode, explain, listModules, sourceRows } from './catalog.js';
 
 const src = (path: string) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 
@@ -160,5 +160,17 @@ describe('closestCodes', () => {
     expect(closestCodes('TITLE_MISSIN')).toHaveLength(3);
     expect(closestCodes('TITLE_MISSIN')[0]).toBe('TITLE_MISSING');
     expect(closestCodes('hsts_missing', 1)).toEqual(['HSTS_MISSING']);
+  });
+});
+
+describe('listModules', () => {
+  it('prints every module in run order with its pack and code count', () => {
+    const [header, ...rows] = listModules().split('\n');
+    expect(header.split(/\s+/)).toEqual(['module', 'pack', 'codes']);
+    expect(rows.map((row) => row.split(/\s+/))).toEqual(MODULE_IDS.map((id) => [
+      id,
+      MODULE_PACKS[id],
+      String(new Set(sourceRows().filter(([source]) => source === id).map(([, , code]) => code)).size),
+    ]));
   });
 });

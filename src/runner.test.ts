@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runAudit, phases } from './runner.js';
-import { MODULE_IDS } from './types.js';
+import { MODULE_IDS, MODULE_PACKS } from './types.js';
+import { buildAgentReport } from './utils/agent-format.js';
 
 vi.mock('./utils/http.js', async (importOriginal) => ({
   RedirectError: (await importOriginal<typeof import('./utils/http.js')>()).RedirectError,
@@ -848,6 +849,62 @@ describe('runAudit with only', () => {
     const report = await runAudit('https://example.com', { only: ['metadata'] });
 
     expect(report.summary).toEqual({ errors: 1, warnings: 0, info: 0, passed: 0 });
+  });
+
+  it('tags each module with the pack MODULE_PACKS gives it', () => {
+    const tags = Object.fromEntries(phases.flat().map((m) => [m.name, m.pack ?? 'generic']));
+    expect(tags).toEqual(MODULE_PACKS);
+  });
+
+  it('leaves out the vercel pack and lists it in the agent output as skipped', async () => {
+    const report = await runAudit('https://example.com', { skipPacks: ['vercel'] });
+
+    expect(mockVercel).not.toHaveBeenCalled();
+    expect(mockNextjs).toHaveBeenCalledTimes(1);
+    expect(report.skippedByPack).toEqual(['vercel']);
+    expect('only' in report).toBe(false);
+    expect(buildAgentReport(report, { version: '0.0.0', exitCode: 0 }).skipped).toEqual(['vercel', 'crawl']);
+  });
+
+  it('leaves out both packs together', async () => {
+    const report = await runAudit('https://example.com', { skipPacks: ['vercel', 'nextjs'] });
+
+    expect(called()).not.toContain('vercel');
+    expect(called()).not.toContain('nextjs');
+    expect(called()).not.toContain('streamedMetadata');
+    expect(report.skippedByPack).toEqual(['nextjs', 'vercel', 'streamedMetadata']);
+  });
+
+  it('keeps a module named in only over a skipped pack, with a note on stderr', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const report = await runAudit('https://example.com', { only: ['vercel'], skipPacks: ['vercel'] });
+      expect(called()).toEqual(['vercel']);
+      expect(report.only).toEqual(['vercel']);
+      expect('skippedByPack' in report).toBe(false);
+      expect(stderr.mock.calls).toEqual([['--only "vercel" overrides --skip-pack vercel\n']]);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it('says nothing when only does not name a module of the skipped pack', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const report = await runAudit('https://example.com', { only: ['metadata'], skipPacks: ['vercel'] });
+      expect(called()).toEqual(['metadata']);
+      expect('skippedByPack' in report).toBe(false);
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it('leaves skippedByPack off the report when no pack is skipped', async () => {
+    const report = await runAudit('https://example.com', { skipPacks: [] });
+
+    expect(mockVercel).toHaveBeenCalledTimes(1);
+    expect('skippedByPack' in report).toBe(false);
   });
 
   it('leaves only off the report when nothing is selected', async () => {

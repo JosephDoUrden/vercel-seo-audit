@@ -7,6 +7,7 @@ import type {
   IssueCategory,
   IssueCode,
   ModuleId,
+  ModulePack,
   PageFacts,
 } from './types.js';
 import { MODULE_IDS } from './types.js';
@@ -42,6 +43,8 @@ type AuditModule = {
   deps?: readonly ModuleId[];
   /** Reads the page as HTML, so it is skipped when the page is not HTML. */
   html?: boolean;
+  /** The pack `--skip-pack` leaves it out with; untagged modules are generic and always run. */
+  pack?: ModulePack;
 };
 
 // Phases run one after another; the modules inside a phase run in parallel.
@@ -55,14 +58,14 @@ export const phases: readonly (readonly AuditModule[])[] = [
     { name: 'sitemap', run: auditSitemap, deps: ['robots'] },
     { name: 'metadata', run: auditMetadata, html: true },
     { name: 'favicon', run: auditFavicon, html: true },
-    { name: 'nextjs', run: auditNextjs },
+    { name: 'nextjs', run: auditNextjs, pack: 'nextjs' },
     { name: 'structuredData', run: auditStructuredData, html: true },
     { name: 'i18n', run: auditI18n, html: true },
     { name: 'images', run: auditImages, html: true },
     { name: 'security', run: auditSecurity },
     { name: 'performance', run: auditPerformance, html: true },
-    { name: 'vercel', run: auditVercel },
-    { name: 'streamedMetadata', run: auditStreamedMetadata, html: true },
+    { name: 'vercel', run: auditVercel, pack: 'vercel' },
+    { name: 'streamedMetadata', run: auditStreamedMetadata, html: true, pack: 'nextjs' },
     { name: 'hostLeak', run: auditHostLeak, html: true },
     { name: 'uaParity', run: auditUaParity, html: true },
   ],
@@ -84,6 +87,27 @@ function expandOnly(only: readonly ModuleId[]): ModuleId[] {
   };
   only.forEach(add);
   return MODULE_IDS.filter((id) => selected.has(id));
+}
+
+/**
+ * Drops the modules in `packs` from `selected` and returns them. The skip comes
+ * before `--only` expansion: a module named in `only` stays (and says so on
+ * stderr), and so do the dependencies `only` brought in.
+ */
+function skipPacks(selected: Set<ModuleId>, packs: readonly ModulePack[], only: readonly ModuleId[]): ModuleId[] {
+  if (packs.length === 0) return [];
+  const named = new Set(only);
+  const skipped: ModuleId[] = [];
+  for (const mod of phases.flat()) {
+    if (!mod.pack || !packs.includes(mod.pack) || !selected.has(mod.name)) continue;
+    if (named.has(mod.name)) {
+      process.stderr.write(`--only "${mod.name}" overrides --skip-pack ${mod.pack}\n`);
+    } else if (only.length === 0) {
+      selected.delete(mod.name);
+      skipped.push(mod.name);
+    }
+  }
+  return skipped;
 }
 
 // The category a module's MODULE_FAILED finding is filed under.
@@ -211,6 +235,11 @@ export interface RunAuditOptions {
   /** Run only these modules (and the modules they depend on). The page is still fetched once. */
   only?: readonly ModuleId[];
   /**
+   * Leave out the modules in these packs. A module named in `only` still runs, with
+   * a note on stderr, and so does a module another selected one depends on.
+   */
+  skipPacks?: readonly ModulePack[];
+  /**
    * Cancels the audit. Every request in flight is aborted, no new one starts, and
    * `runAudit` rejects with an error named `AbortError` instead of returning a
    * partial report.
@@ -330,6 +359,7 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
   if (only && opts.crawl !== undefined && !selected.has('crawl')) {
     process.stderr.write('--crawl has no effect: "crawl" is not in --only\n');
   }
+  const skippedByPack = skipPacks(selected, opts.skipPacks ?? [], opts.only ?? []);
 
   let allModules: AuditModuleResult[] = [];
   if (targetFindings.length > 0) allModules.push({ module: 'target', findings: targetFindings });
@@ -371,6 +401,7 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
     summary,
     modules: allModules,
     ...(only && { only }),
+    ...(skippedByPack.length > 0 && { skippedByPack }),
     page: pageFacts,
   };
 }

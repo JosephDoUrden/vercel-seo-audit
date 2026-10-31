@@ -9,10 +9,11 @@ import { parsePagesFlag } from './utils/parsePagesFlag.js';
 import { loadConfig } from './utils/config.js';
 import { resolveIgnore } from './utils/ignore.js';
 import { resolveOnly } from './utils/only.js';
+import { resolveSkipPacks } from './utils/skipPacks.js';
 import { diffReports } from './utils/diff.js';
 import { generateFixes } from './fixes/index.js';
 import { formatAgent, resolveFormat } from './utils/agent-format.js';
-import { explain } from './utils/catalog.js';
+import { explain, listModules } from './utils/catalog.js';
 import { USER_AGENT_PRESETS, DEFAULT_CRAWL_LIMIT, VERSION } from './constants.js';
 import type { AuditReport } from './types.js';
 
@@ -37,7 +38,8 @@ program
   .option('--apply', 'Write suggested fixes to disk (requires --fix)')
   .option('--ignore <codes>', 'Comma-separated issue codes to ignore, repeatable (e.g. ROBOTS_MISSING,FAVICON_MISSING)', (value: string, previous: string[]) => [...previous, value], [] as string[])
   .option('--only <modules>', 'Comma-separated audit modules to run, repeatable; their dependencies are added (e.g. vercel,streamedMetadata)', (value: string, previous: string[]) => [...previous, value], [] as string[])
-  .action(async (urlArg: string | undefined, options: { json?: boolean; format?: string; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[]; only: string[] }) => {
+  .option('--skip-pack <packs>', 'Comma-separated module packs to leave out, repeatable: vercel, nextjs', (value: string, previous: string[]) => [...previous, value], [] as string[])
+  .action(async (urlArg: string | undefined, options: { json?: boolean; format?: string; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[]; only: string[]; skipPack: string[] }) => {
     // Load config file
     let config;
     try {
@@ -60,6 +62,15 @@ program
     let only;
     try {
       only = resolveOnly({ cliValues: options.only, config });
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(2);
+    }
+
+    // Packs to leave out: --skip-pack replaces config
+    let skipPacks;
+    try {
+      skipPacks = resolveSkipPacks({ cliValues: options.skipPack, config });
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exit(2);
@@ -166,6 +177,7 @@ program
         crawl,
         ignore,
         only,
+        skipPacks,
       });
 
       // Exit code based on findings; 2 when the page could not be fetched at all
@@ -260,8 +272,17 @@ program.exitOverride((err) => process.exit(usageExitCode(err.exitCode)));
 program
   .command('explain')
   .description('Explain an issue code: the module that reports it, its category and what it means')
-  .argument('<code>', 'Issue code, e.g. NOINDEX_DETECTED')
-  .action((code: string) => {
+  .argument('[code]', 'Issue code, e.g. NOINDEX_DETECTED')
+  .option('--modules', 'List every module with its pack and how many codes it reports')
+  .action((code: string | undefined, options: { modules?: boolean }) => {
+    if (options.modules) {
+      console.log(listModules());
+      return;
+    }
+    if (code === undefined) {
+      console.error('Error: give an issue code, or --modules to list the modules');
+      process.exit(2);
+    }
     const result = explain(code);
     if (!result.ok) {
       console.error(result.error);

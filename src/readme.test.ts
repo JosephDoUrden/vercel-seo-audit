@@ -1,19 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { MODULE_IDS } from './types.js';
+import { MODULE_IDS, MODULE_PACKS } from './types.js';
 
 const readme = readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf-8');
 
-// Ids in the first column of the module table under "### Running some modules only".
-function tableIds(): string[] {
+// [id, pack] from the first two columns of the module table under "### Running some modules only".
+function tableRows(): [string, string][] {
   const section = readme.split('### Running some modules only')[1]?.split(/\n#{2,3} /)[0] ?? '';
-  return [...section.matchAll(/^\| `([A-Za-z0-9]+)` \|/gm)].map((m) => m[1]);
+  return [...section.matchAll(/^\| `([A-Za-z0-9]+)` \| ([a-z]+) \|/gm)].map((m): [string, string] => [m[1], m[2]]);
 }
 
 describe('README module table', () => {
   it('lists every module id, in run order, and nothing else', () => {
-    expect(tableIds()).toEqual([...MODULE_IDS]);
+    expect(tableRows().map(([id]) => id)).toEqual([...MODULE_IDS]);
+  });
+
+  it('gives each module the pack MODULE_PACKS gives it', () => {
+    expect(Object.fromEntries(tableRows())).toEqual(MODULE_PACKS);
   });
 });
 
