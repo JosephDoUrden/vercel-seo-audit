@@ -96,6 +96,20 @@ npx vercel-seo-audit explain NOINDEX_DETECTED
 
 `--format agent` is the stable contract for agents. `--json` is the full report dump and can change shape between releases.
 
+### Install as an agent skill
+
+The repo ships an [Agent Skill](./skills/vercel-seo-audit/SKILL.md) that tells the agent when to run the audit, where in a Next.js app each finding is fixed, and to re-run after you deploy. It works with Claude Code, Codex, Cursor, Gemini CLI, Copilot and the other agents the `skills` CLI supports:
+
+```bash
+npx skills add JosephDoUrden/vercel-seo-audit
+```
+
+In Claude Code you can install it as a plugin instead:
+
+```
+/plugin install vercel-seo-audit --marketplace JosephDoUrden/vercel-seo-audit
+```
+
 ---
 
 ## Usage
