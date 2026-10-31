@@ -2,6 +2,7 @@ import type { AuditContext, AuditFinding } from '../types.js';
 import { DEFAULT_PATHS, SITEMAP_SAMPLE_SIZE } from '../constants.js';
 import { fetchPage, fetchHead, followRedirectChain } from '../utils/http.js';
 import { parseSitemapXml } from '../utils/xml-parser.js';
+import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
 import { getOrigin } from '../utils/url.js';
 
 export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
@@ -31,6 +32,11 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
   try {
     const res = await fetchPage(sitemapUrl, ctx.fetchOptions);
     if (res.status !== 200) {
+      const challenge = detectChallenge(res.headers, res.status);
+      if (challenge) {
+        findings.push(edgeChallengeFinding(challenge, 'sitemap', 'the sitemap', sitemapUrl));
+        return findings;
+      }
       findings.push({
         code: 'SITEMAP_MISSING',
         severity: 'warning',
