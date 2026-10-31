@@ -195,19 +195,30 @@ function notHtml(url: string, contentType: string | null, body: string): AuditFi
   };
 }
 
-export async function runAudit(
-  url: string,
-  opts: {
-    verbose?: boolean;
-    timeout?: number;
-    pages?: string[];
-    userAgent?: string;
-    crawl?: number;
-    ignore?: readonly IssueCode[];
-    /** Run only these modules (and the modules they depend on). The page is still fetched once. */
-    only?: readonly ModuleId[];
-  } = {},
-): Promise<AuditReport> {
+/** Options for {@link runAudit}; each one matches the CLI flag of the same name. */
+export interface RunAuditOptions {
+  verbose?: boolean;
+  /** Per-request timeout in milliseconds. */
+  timeout?: number;
+  /** Page paths to check for redirects, in place of the common ones (`/about`, `/contact`, ...). */
+  pages?: string[];
+  /** Sent as-is; the CLI's presets (`googlebot`, ...) are resolved before this. */
+  userAgent?: string;
+  /** Crawl up to this many sitemap pages. Crawl is off when unset. */
+  crawl?: number;
+  /** Findings with these codes stay in the report, marked `ignored`, and leave the counts. */
+  ignore?: readonly IssueCode[];
+  /** Run only these modules (and the modules they depend on). The page is still fetched once. */
+  only?: readonly ModuleId[];
+}
+
+/**
+ * Audits one URL and returns the full report. Every request it makes, the page's
+ * redirects, sitemap URLs and crawled links included, is refused when it points at
+ * a private address and `url` does not, so a caller passing user input gets the same
+ * guard as the CLI.
+ */
+export async function runAudit(url: string, opts: RunAuditOptions = {}): Promise<AuditReport> {
   const start = Date.now();
   const normalized = normalizeUrl(url);
 
