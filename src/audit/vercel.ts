@@ -1,5 +1,6 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { getNoindexDirective } from '../utils/html-parser.js';
+import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
 import { fetchPage } from '../utils/http.js';
 
 // Vercel's own examples pair a one-second s-maxage with stale-while-revalidate. Below a
@@ -104,7 +105,19 @@ async function recheck(url: string, ctx: AuditContext): Promise<Recheck | undefi
 export async function auditVercel(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
   const { normalizedUrl, headers } = ctx;
-  if (!headers) return findings;
+
+  // Phase 0 shares only a 2xx page, and a challenge is never one. Asking again here goes
+  // through the shared cache, so it is the same request the other modules retry with.
+  if (!headers) {
+    try {
+      const page = await fetchPage(normalizedUrl, ctx.fetchOptions);
+      const challenge = detectChallenge(page.headers, page.status);
+      if (challenge) findings.push(edgeChallengeFinding(challenge, 'vercel', 'the page', page.finalUrl));
+    } catch {
+      // Nothing to read
+    }
+    return findings;
+  }
 
   const url = ctx.finalUrl ?? normalizedUrl;
 

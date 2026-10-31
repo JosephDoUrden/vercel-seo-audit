@@ -238,4 +238,31 @@ describe('auditRobots', () => {
     const findings = await auditRobots(makeCtx());
     expect(findings.find((f) => f.code === 'ROBOTS_BLOCKS_ALL')).toBeUndefined();
   });
+
+  it('reports EDGE_CHALLENGE instead of ROBOTS_MISSING when robots.txt is challenged', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html>challenge</html>',
+      status: 403,
+      headers: new Headers({ 'x-vercel-mitigated': 'challenge' }),
+      finalUrl: 'https://example.com/robots.txt',
+    });
+
+    const findings = await auditRobots(makeCtx());
+    expect(findings.map((f) => f.code)).toEqual(['EDGE_CHALLENGE']);
+    expect(findings[0].category).toBe('robots');
+    expect(findings[0].url).toBe('https://example.com/robots.txt');
+    expect(findings[0].details).toEqual({ status: 403, provider: 'vercel', header: 'x-vercel-mitigated' });
+  });
+
+  it('keeps ROBOTS_MISSING for a 403 without a challenge header', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '',
+      status: 403,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/robots.txt',
+    });
+
+    const findings = await auditRobots(makeCtx());
+    expect(findings.map((f) => f.code)).toEqual(['ROBOTS_MISSING']);
+  });
 });

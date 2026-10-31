@@ -1,5 +1,6 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { DEFAULT_PATHS, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
+import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
 import { fetchPage } from '../utils/http.js';
 import { getOrigin } from '../utils/url.js';
 
@@ -45,10 +46,15 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
   let robotsTxt: string | undefined;
   try {
     const res = await fetchPage(robotsUrl, ctx.fetchOptions);
+    const challenge = detectChallenge(res.headers, res.status);
     if (res.status === 200) {
       robotsTxt = res.body;
       // Store for cross-module use
       ctx.robotsTxt = robotsTxt;
+    } else if (challenge) {
+      // A challenged robots.txt may well exist; it just was not served to us.
+      findings.push(edgeChallengeFinding(challenge, 'robots', 'robots.txt', robotsUrl));
+      return findings;
     } else if (res.status >= 500 || res.status === 429) {
       // Google's robots.txt spec (updated 23 Oct 2026) on 5xx: "For the first 12 hours, Google
       // stops crawling the site but keeps trying to fetch the robots.txt file. If Google can't

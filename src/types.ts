@@ -129,6 +129,8 @@ export const ISSUE_CODES = [
   'VERCEL_S_MAXAGE_SHORT',
   'VERCEL_SWR_MISSING',
   'VERCEL_PREVIEW_INDEXABLE',
+  // Edge challenge or WAF block, on the page, robots.txt or the sitemap
+  'EDGE_CHALLENGE',
 ] as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[number];

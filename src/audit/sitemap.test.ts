@@ -306,4 +306,19 @@ describe('auditSitemap', () => {
     expect(ctx.sitemapUrls).toEqual([]);
     expect(findings.find((f) => f.severity === 'pass')).toBeDefined();
   });
+
+  it('reports EDGE_CHALLENGE instead of SITEMAP_MISSING when the sitemap is challenged', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html>challenge</html>',
+      status: 403,
+      headers: new Headers({ 'cf-mitigated': 'challenge' }),
+      finalUrl: 'https://example.com/sitemap.xml',
+    });
+
+    const findings = await auditSitemap(makeCtx());
+    expect(findings.map((f) => f.code)).toEqual(['EDGE_CHALLENGE']);
+    expect(findings[0].category).toBe('sitemap');
+    expect(findings[0].url).toBe('https://example.com/sitemap.xml');
+    expect(findings[0].details).toEqual({ status: 403, provider: 'cloudflare', header: 'cf-mitigated' });
+  });
 });

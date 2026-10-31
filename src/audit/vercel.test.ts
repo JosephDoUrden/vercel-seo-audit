@@ -560,4 +560,40 @@ describe('auditVercel', () => {
       expect(codes(findings)).toContain('VERCEL_PREVIEW_INDEXABLE');
     });
   });
+
+  // Phase 0 shares only a 2xx page, so a challenged entry page reaches the module as no headers.
+  describe('edge challenge', () => {
+    const challenged = (headers: Record<string, string>, status = 403) =>
+      mockFetchPage.mockResolvedValue(page(headers, { status, body: '<html>challenge</html>' }));
+
+    it('reports a Vercel challenge on the entry page', async () => {
+      challenged({ server: 'Vercel', 'x-vercel-id': 'fra1::x', 'x-vercel-mitigated': 'challenge' });
+      const findings = await auditVercel(makeCtx({ headers: undefined }));
+      expect(codes(findings)).toEqual(['EDGE_CHALLENGE']);
+      expect(findings[0].severity).toBe('error');
+      expect(findings[0].category).toBe('vercel');
+      expect(findings[0].message).toContain('as an unverified client');
+      expect(findings[0].details).toEqual({ status: 403, provider: 'vercel', header: 'x-vercel-mitigated' });
+      expect(findings[0].url).toBe('https://example.com/');
+    });
+
+    it('reports a Cloudflare challenge on the entry page', async () => {
+      challenged({ server: 'cloudflare', 'cf-mitigated': 'challenge' }, 503);
+      const findings = await auditVercel(makeCtx({ headers: undefined }));
+      expect(codes(findings)).toEqual(['EDGE_CHALLENGE']);
+      expect(findings[0].details).toEqual({ status: 503, provider: 'cloudflare', header: 'cf-mitigated' });
+    });
+
+    it('says nothing about a 403 without a challenge header', async () => {
+      challenged({ server: 'Vercel', 'x-vercel-id': 'fra1::x' });
+      const findings = await auditVercel(makeCtx({ headers: undefined }));
+      expect(findings).toHaveLength(0);
+    });
+
+    it('says nothing when the second request fails', async () => {
+      mockFetchPage.mockRejectedValue(new Error('Network error'));
+      const findings = await auditVercel(makeCtx({ headers: undefined }));
+      expect(findings).toHaveLength(0);
+    });
+  });
 });
