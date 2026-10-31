@@ -519,39 +519,15 @@ npx vercel-seo-audit https://your-site.com --report md
 
 ## Roadmap
 
-### Completed
+The full roadmap, with sources and sizes, is in [docs/ROADMAP.md](./docs/ROADMAP.md). In short:
 
-* [x] ~~`--strict` (warnings fail with exit code 1)~~
-* [x] ~~`--pages` to customise sampled paths~~
-* [x] ~~`--user-agent` presets (`googlebot`, `bingbot`)~~
-* [x] ~~`--report` to write `report.json` / `report.md`~~
-* [x] ~~GitHub Action marketplace wrapper~~
-* [x] ~~`--diff` to compare two audit runs and detect regressions~~
-* [x] ~~Structured data / JSON-LD validation~~
-* [x] ~~`--crawl` mode to audit all pages from sitemap~~
-* [x] ~~i18n / `hreflang` validation~~
-* [x] ~~Image SEO checks (missing `alt`, `next/image`, lazy loading)~~
-* [x] ~~Config file (`.seoauditrc.json`) for project-level defaults~~
-* [x] ~~Open Graph & Twitter Card image validation ([#36](https://github.com/JosephDoUrden/vercel-seo-audit/issues/36))~~
-* [x] ~~Security headers audit ([#37](https://github.com/JosephDoUrden/vercel-seo-audit/issues/37))~~
-* [x] ~~Performance hints (resource size, render-blocking) ([#38](https://github.com/JosephDoUrden/vercel-seo-audit/issues/38))~~
-* [x] ~~HTML report format with interactive dashboard ([#39](https://github.com/JosephDoUrden/vercel-seo-audit/issues/39))~~
-* [x] ~~`--ignore` flag and `.seoauditignore` support ([#41](https://github.com/JosephDoUrden/vercel-seo-audit/issues/41))~~
-* [x] ~~GitHub Actions PR comment integration ([#44](https://github.com/JosephDoUrden/vercel-seo-audit/issues/44))~~
-* [x] ~~`--fix` flag with auto-fix suggestions ([#40](https://github.com/JosephDoUrden/vercel-seo-audit/issues/40))~~
-* [x] ~~`--only` to run selected modules ([#166](https://github.com/JosephDoUrden/vercel-seo-audit/pull/166))~~
-* [x] ~~Vercel CDN cache and preview checks ([#126](https://github.com/JosephDoUrden/vercel-seo-audit/pull/126))~~
-* [x] ~~Metadata streamed into `<body>` on Next.js 15.2+ ([#162](https://github.com/JosephDoUrden/vercel-seo-audit/pull/162))~~
+* **Now:** accuracy fixes found by running v2.10.0 against live sites, and fetch hardening
+  (body cap, global deadline, same-origin crawl, unreachable target exits 2).
+* **Next:** edge challenge detection, robots.txt status semantics, soft-404 probing, canonical
+  integrity, host leaks, strict sitemap validation, user-agent parity.
+* **Then:** `--format agent`, an Agent Skill, and a read-only MCP server.
 
-### Up next
-
-* [ ] Internal broken link checker ([#42](https://github.com/JosephDoUrden/vercel-seo-audit/issues/42))
-
-### Future
-
-* [ ] Page speed score via PageSpeed Insights API ([#43](https://github.com/JosephDoUrden/vercel-seo-audit/issues/43))
-* [ ] Accessibility basics audit ([#45](https://github.com/JosephDoUrden/vercel-seo-audit/issues/45))
-* [ ] Plugin system for custom audit checks ([#47](https://github.com/JosephDoUrden/vercel-seo-audit/issues/47))
+Everything shipped so far is in the [changelog](./CHANGELOG.md).
 
 ---
 
