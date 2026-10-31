@@ -12,7 +12,7 @@ A CLI that explains **why Google isn't indexing your Next.js site**, from what t
 * **Preview deployments left indexable.** A `*.vercel.app` URL served without `x-robots-tag: noindex` or a robots meta `noindex` (`VERCEL_PREVIEW_INDEXABLE`): an error on branch URLs, which are always previews, and a warning on other generated URLs, which may be production.
 * **Metadata streamed into `<body>`.** Next.js 15.2 and later stream dynamic `generateMetadata` output into `<body>` for every user agent not on their HTML-limited bot list, so a crawler that reads only `<head>` and does not run JavaScript sees no title, description or canonical. The page is fetched once more as a bot on that list to confirm (`METADATA_STREAMED_TO_BODY`, `METADATA_NOT_IN_HEAD`, `METADATA_IN_HEAD`).
 
-Beyond those, the audit covers redirect chains and loops, the trailing-slash 308, robots.txt (including rules that keep Googlebot from the page's scripts and stylesheets, `ROBOTS_BLOCKS_RENDER_ASSETS`), the sitemap, `noindex` headers, canonical mismatches, Open Graph, favicons, JSON-LD, hreflang, images, security headers, performance hints, Vercel CDN cache headers and Vercel or Cloudflare challenge pages on the page, robots.txt or the sitemap (`EDGE_CHALLENGE`), with `--crawl` to run the page checks over every sitemap URL. The 14 modules are listed under [Running some modules only](#running-some-modules-only).
+Beyond those, the audit covers redirect chains and loops, the trailing-slash 308, robots.txt (including rules that keep Googlebot from the page's scripts and stylesheets, `ROBOTS_BLOCKS_RENDER_ASSETS`), the sitemap, `noindex` headers, canonical mismatches, Open Graph, favicons, JSON-LD, hreflang, images, security headers, performance hints, Vercel CDN cache headers and Vercel or Cloudflare challenge pages on the page, robots.txt or the sitemap (`EDGE_CHALLENGE`), canonical, social card, hreflang and JSON-LD URLs that point at localhost or a `vercel.app` host (`URL_HOST_LOCALHOST`, `URL_HOST_VERCEL_APP`, `URL_HOST_MISMATCH`), with `--crawl` to run the page checks over every sitemap URL. The 15 modules are listed under [Running some modules only](#running-some-modules-only).
 
 ---
 
@@ -203,6 +203,7 @@ Ignored findings do not count towards the summary or the exit code. The text rep
 | `performance` | Performance hints |
 | `vercel` | Vercel CDN cache headers and indexable preview URLs |
 | `streamedMetadata` | Metadata streamed into `<body>` by Next.js 15.2+ |
+| `hostLeak` | Canonical, social card, hreflang and JSON-LD URLs on localhost or a vercel.app host |
 | `crawl` | Sitemap URLs up to the `--crawl` limit (default 50); adds `robots` and `sitemap` |
 
 A module that reads another one's results brings it along: `--only sitemap` also runs `robots`, so the robots.txt cross-check still happens, and `--only crawl` runs `robots` and `sitemap` first. `--only` without `crawl` turns crawling off even if `--crawl` is set (a warning says so); naming `crawl` turns it on, with the `--crawl` limit or the default of 50. Ids match exactly, case included, and an unknown one stops the run with exit code `2`.
