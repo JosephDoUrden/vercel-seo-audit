@@ -14,6 +14,7 @@ import { normalizeUrl } from './utils/url.js';
 import { fetchPage } from './utils/http.js';
 import { isNextjsPage } from './utils/nextjs.js';
 import { responseTooLarge } from './utils/tooLarge.js';
+import { detectChallenge } from './utils/challenge.js';
 import {
   auditRedirects,
   auditRobots,
@@ -237,7 +238,10 @@ export async function runAudit(
       ctx.headers = Object.fromEntries(page.headers.entries());
       ctx.finalUrl = page.finalUrl;
     } else {
-      if (page.status >= 400) targetFindings.push(httpError(normalized, page.status, page.finalUrl));
+      // A challenge page is reported by the vercel module as EDGE_CHALLENGE.
+      if (page.status >= 400 && !detectChallenge(page.headers, page.status)) {
+        targetFindings.push(httpError(normalized, page.status, page.finalUrl));
+      }
       fetchOptions.cache?.clear();
     }
   } catch (err) {

@@ -474,6 +474,20 @@ describe('runAudit when the target cannot be audited', () => {
     expect(report.modules[0].module).toBe('target');
   });
 
+  it('leaves a challenged entry page to EDGE_CHALLENGE instead of adding TARGET_HTTP_ERROR', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html>challenge</html>',
+      status: 403,
+      headers: new Headers({ 'x-vercel-mitigated': 'challenge' }),
+      finalUrl: 'https://example.com/',
+    });
+
+    const report = await runAudit('https://example.com');
+
+    expect(report.modules.map((m) => m.module)).not.toContain('target');
+    expect(mockVercel).toHaveBeenCalledTimes(1);
+  });
+
   it('adds no target finding for a 2xx HTML page', async () => {
     const report = await runAudit('https://example.com');
     expect(report.modules.map((m) => m.module)).not.toContain('target');
