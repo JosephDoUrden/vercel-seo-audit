@@ -231,6 +231,55 @@ describe('fetchPage deadline', () => {
   });
 });
 
+describe('redirects into a private network', () => {
+  it('refuses a public site redirecting to the metadata address, without requesting it', async () => {
+    mockFetch.mockResolvedValueOnce(response(302, '', { location: 'http://169.254.169.254/latest/meta-data/' }));
+
+    await expect(fetchPage('https://example.com/')).rejects.toThrow(/private address 169\.254\.169\.254/);
+    expect(requestedUrls()).toEqual(['https://example.com/']);
+  });
+
+  it('records the refused hop in followRedirectChain', async () => {
+    mockFetch.mockResolvedValueOnce(response(301, '', { location: 'http://10.0.0.5/' }));
+
+    const chain = await followRedirectChain('https://example.com/');
+
+    expect(chain.hops).toEqual([{ url: 'https://example.com/', status: 301, location: 'http://10.0.0.5/' }]);
+    expect(chain.finalUrl).toBe('http://10.0.0.5/');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('walks HEAD redirects itself and refuses one into a private network', async () => {
+    mockFetch.mockResolvedValueOnce(response(302, '', { location: 'http://[::1]/admin' }));
+
+    await expect(fetchHead('https://cdn.example.com/a.png')).rejects.toThrow(/private address \[::1\]/);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][1]).toMatchObject({ method: 'HEAD', redirect: 'manual' });
+  });
+
+  it('follows public HEAD redirects to the final status', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(301, '', { location: '/b.png' }))
+      .mockResolvedValueOnce(response(200, '', { 'content-length': '42' }));
+
+    const head = await fetchHead('https://cdn.example.com/a.png');
+
+    expect(head.status).toBe(200);
+    expect(head.headers.get('content-length')).toBe('42');
+    expect(requestedUrls()).toEqual(['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png']);
+  });
+
+  it('follows a local server redirecting within the private network', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(302, '', { location: 'http://127.0.0.1:3000/home' }))
+      .mockResolvedValueOnce(response(200, '<html>home</html>'));
+
+    const page = await fetchPage('http://localhost:3000/');
+
+    expect(page.body).toBe('<html>home</html>');
+  });
+});
+
 describe('fetchPage body cap', () => {
   it('stops reading at MAX_BODY_BYTES, marks the page truncated and closes the stream', async () => {
     const chunk = new Uint8Array(1024 * 1024).fill(0x61);

@@ -9,6 +9,9 @@ import {
   isSameOrigin,
   getOrigin,
   toHttpUrl,
+  isPrivateAddress,
+  reachesPrivateAddress,
+  isSameHost,
 } from './url.js';
 
 describe('normalizeUrl', () => {
@@ -172,5 +175,86 @@ describe('toHttpUrl', () => {
 
   it('keeps http as http', () => {
     expect(toHttpUrl('http://example.com/page')).toBe('http://example.com/page');
+  });
+});
+
+describe('isPrivateAddress', () => {
+  // Hostnames as new URL() hands them over, so the odd IPv4 spellings arrive normalised.
+  const host = (url: string) => new URL(url).hostname;
+
+  it.each([
+    'http://127.0.0.1/',
+    'http://127.8.9.10/',
+    'http://10.0.0.1/',
+    'http://172.16.0.1/',
+    'http://172.31.255.255/',
+    'http://192.168.1.1/',
+    'http://169.254.169.254/latest/meta-data/',
+    'http://100.64.0.1/',
+    'http://0.0.0.0/',
+    'http://2130706433/',
+    'http://0x7f.1/',
+    'http://localhost:3000/',
+    'http://app.localhost/',
+    'http://[::1]/',
+    'http://[::]/',
+    'http://[fd00:ec2::254]/',
+    'http://[fc00::1]/',
+    'http://[fe80::1]/',
+    'http://[::ffff:127.0.0.1]/',
+    'http://[::ffff:a9fe:a9fe]/',
+  ])('flags %s', (url) => {
+    expect(isPrivateAddress(host(url))).toBe(true);
+  });
+
+  it.each([
+    'https://example.com/',
+    'http://8.8.8.8/',
+    'http://172.15.0.1/',
+    'http://172.32.0.1/',
+    'http://100.128.0.1/',
+    'http://169.255.0.1/',
+    'http://[2606:4700::1111]/',
+    'http://[::ffff:8.8.8.8]/',
+    'http://10.example.com/',
+  ])('leaves %s alone', (url) => {
+    expect(isPrivateAddress(host(url))).toBe(false);
+  });
+});
+
+describe('reachesPrivateAddress', () => {
+  it('refuses a private address reached from a public site', () => {
+    expect(reachesPrivateAddress('http://169.254.169.254/', 'https://example.com/')).toBe(true);
+  });
+
+  it('allows a private address when the audit itself targets one', () => {
+    expect(reachesPrivateAddress('http://127.0.0.1:3000/a', 'http://localhost:3000/')).toBe(false);
+  });
+
+  it('allows public addresses', () => {
+    expect(reachesPrivateAddress('https://cdn.example.net/x.png', 'https://example.com/')).toBe(false);
+  });
+
+  it('does not flag a URL it cannot parse', () => {
+    expect(reachesPrivateAddress('not a url', 'https://example.com/')).toBe(false);
+  });
+});
+
+describe('isSameHost', () => {
+  it('ignores the scheme', () => {
+    expect(isSameHost('http://example.com/a', 'https://example.com/b')).toBe(true);
+  });
+
+  it('ignores case and default ports', () => {
+    expect(isSameHost('https://EXAMPLE.com:443/', 'https://example.com/')).toBe(true);
+  });
+
+  it('tells subdomains and ports apart', () => {
+    expect(isSameHost('https://www.example.com/', 'https://example.com/')).toBe(false);
+    expect(isSameHost('https://example.com:8443/', 'https://example.com/')).toBe(false);
+  });
+
+  it('is false for a URL it cannot parse', () => {
+    expect(isSameHost('nope', 'https://example.com/')).toBe(false);
   });
 });

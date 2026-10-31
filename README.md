@@ -250,6 +250,17 @@ The page is fetched once before any module runs.
 * Empty sitemap / broken URLs (samples up to 10)
 * Sitemap index support
 * Cross-check with robots.txt `Sitemap:` directive
+* URLs and child sitemaps on another host (`SITEMAP_CROSS_HOST_URLS`, warning, with the count
+  and up to five examples). They are never fetched, sampled or crawled. `http` and `https` on
+  the same host count as the same host, and so does the host the page or the sitemap
+  redirected to
+
+Wherever the audit follows a URL it did not get from you (redirect hops, child sitemaps,
+crawled pages, `og:image` / `twitter:image` / `<img>` probes, hreflang alternates), it refuses
+literal loopback, private, link-local and cloud-metadata addresses such as `169.254.169.254`,
+unless the audited URL is itself on one (auditing `http://localhost:3000` still works). Only
+literal addresses are checked: no DNS lookup is made, so a public name that resolves to a
+private address is not caught.
 
 ### Metadata
 

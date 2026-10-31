@@ -1,5 +1,6 @@
 import { DEFAULT_TIMEOUT, MAX_BODY_BYTES, MAX_REDIRECTS, USER_AGENT } from '../constants.js';
 import type { FetchOptions, RedirectChain, RedirectHop } from '../types.js';
+import { reachesPrivateAddress } from './url.js';
 
 function buildHeaders(userAgent?: string): Record<string, string> {
   return {
@@ -79,7 +80,8 @@ export function fetchWithoutRedirect(
 }
 
 // Walks redirects hop by hop. `response` is the first non-redirect response,
-// or undefined when a hop failed (`error`) or MAX_REDIRECTS ran out.
+// or undefined when a hop failed (`error`) or MAX_REDIRECTS ran out. A hop from
+// a public URL to a private address is recorded but never requested.
 async function walkRedirects(
   url: string,
   opts: FetchOptions | undefined,
@@ -108,6 +110,10 @@ async function walkRedirects(
     if (location && status >= 300 && status < 400) {
       const resolved = new URL(location, current).href;
       hops.push({ url: current, status, location: resolved });
+      if (reachesPrivateAddress(resolved, url)) {
+        const error = new Error(`Refused to follow a redirect to the private address ${new URL(resolved).hostname}`);
+        return { chain: { hops, finalUrl: resolved, isCircular: false }, error };
+      }
       current = resolved;
     } else {
       return { chain: { hops, finalUrl: current, isCircular: false }, response: res };
@@ -236,14 +242,27 @@ export function fetchHead(
     const controller = new AbortController();
     const timer = abortAt(controller, deadlineFor(opts), url, opts);
 
+    // Redirects are walked here rather than by fetch, so each hop can be
+    // checked before it is requested.
     try {
-      const res = await fetch(url, {
-        method: 'HEAD',
-        redirect: 'follow',
-        signal: controller.signal,
-        headers: buildHeaders(opts?.userAgent),
-      });
-      return { status: res.status, headers: res.headers };
+      let current = url;
+      for (let i = 0; ; i++) {
+        const res = await fetch(current, {
+          method: 'HEAD',
+          redirect: 'manual',
+          signal: controller.signal,
+          headers: buildHeaders(opts?.userAgent),
+        });
+        const location = res.headers.get('location');
+        if (!location || res.status < 300 || res.status >= 400 || i >= MAX_REDIRECTS) {
+          return { status: res.status, headers: res.headers };
+        }
+        const next = new URL(location, current).href;
+        if (reachesPrivateAddress(next, url)) {
+          throw new Error(`Refused to follow a redirect to the private address ${new URL(next).hostname}`);
+        }
+        current = next;
+      }
     } finally {
       clearTimeout(timer);
     }

@@ -322,6 +322,124 @@ describe('auditSitemap', () => {
     expect(findings[0].details).toEqual({ status: 403, provider: 'cloudflare', header: 'cf-mitigated' });
   });
 
+  it('never fetches off-host URLs and reports them once as SITEMAP_CROSS_HOST_URLS', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<urlset></urlset>',
+      status: 200,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/sitemap.xml',
+    });
+    mockParseSitemapXml.mockReturnValue({
+      type: 'urlset',
+      urls: [
+        { loc: 'https://example.com/a' },
+        { loc: 'http://example.com/b' },
+        ...Array.from({ length: 6 }, (_, i) => ({ loc: `https://other.example.net/${i}` })),
+        { loc: 'http://169.254.169.254/latest/meta-data/' },
+      ],
+      sitemaps: [],
+    });
+    mockFetchHead.mockResolvedValue({ status: 200, headers: new Headers() });
+
+    const ctx = makeCtx();
+    const findings = await auditSitemap(ctx);
+    const cross = findings.filter((f) => f.code === 'SITEMAP_CROSS_HOST_URLS');
+
+    expect(mockFetchHead.mock.calls.map(([u]) => u)).toEqual(['https://example.com/a', 'http://example.com/b']);
+    expect(ctx.sitemapUrls).toEqual(['https://example.com/a', 'http://example.com/b']);
+    expect(cross).toHaveLength(1);
+    expect(cross[0]).toMatchObject({
+      severity: 'warning',
+      category: 'sitemap',
+      url: 'https://example.com/sitemap.xml',
+      details: {
+        count: 7,
+        examples: [0, 1, 2, 3, 4].map((i) => `https://other.example.net/${i}`),
+      },
+    });
+    expect(findings.find((f) => f.severity === 'pass')?.message).toContain('9 URLs (2 sampled');
+  });
+
+  it('accepts URLs on the host the site redirected to', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<urlset></urlset>',
+      status: 200,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/sitemap.xml',
+    });
+    mockParseSitemapXml.mockReturnValue({
+      type: 'urlset',
+      urls: [{ loc: 'https://www.example.com/a' }],
+      sitemaps: [],
+    });
+    mockFetchHead.mockResolvedValue({ status: 200, headers: new Headers() });
+
+    const ctx = makeCtx({ finalUrl: 'https://www.example.com/' });
+    const findings = await auditSitemap(ctx);
+
+    expect(findings.find((f) => f.code === 'SITEMAP_CROSS_HOST_URLS')).toBeUndefined();
+    expect(ctx.sitemapUrls).toEqual(['https://www.example.com/a']);
+  });
+
+  it('reports no pass when every URL is off-host', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<urlset></urlset>',
+      status: 200,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/sitemap.xml',
+    });
+    mockParseSitemapXml.mockReturnValue({
+      type: 'urlset',
+      urls: [{ loc: 'https://elsewhere.test/a' }],
+      sitemaps: [],
+    });
+
+    const findings = await auditSitemap(makeCtx());
+
+    expect(mockFetchHead).not.toHaveBeenCalled();
+    expect(findings.map((f) => f.code)).toEqual(['SITEMAP_CROSS_HOST_URLS']);
+  });
+
+  it('does not fetch off-host child sitemaps, and drops off-host URLs inside the others', async () => {
+    mockFetchPage
+      .mockResolvedValueOnce({
+        body: '<sitemapindex></sitemapindex>',
+        status: 200,
+        headers: new Headers(),
+        finalUrl: 'https://example.com/sitemap.xml',
+      })
+      .mockResolvedValueOnce({
+        body: '<urlset></urlset>',
+        status: 200,
+        headers: new Headers(),
+        finalUrl: 'https://example.com/sitemap-1.xml',
+      });
+    mockParseSitemapXml
+      .mockReturnValueOnce({
+        type: 'sitemapindex',
+        urls: [],
+        sitemaps: ['http://10.0.0.1/internal.xml', 'https://example.com/sitemap-1.xml'],
+      })
+      .mockReturnValueOnce({
+        type: 'urlset',
+        urls: [{ loc: 'https://example.com/a' }, { loc: 'https://cdn.test/b' }],
+        sitemaps: [],
+      });
+
+    const ctx = makeCtx();
+    const findings = await auditSitemap(ctx);
+
+    expect(mockFetchPage.mock.calls.map(([u]) => u)).toEqual([
+      'https://example.com/sitemap.xml',
+      'https://example.com/sitemap-1.xml',
+    ]);
+    expect(ctx.sitemapUrls).toEqual(['https://example.com/a']);
+    expect(findings.find((f) => f.code === 'SITEMAP_CROSS_HOST_URLS')?.details).toEqual({
+      count: 2,
+      examples: ['http://10.0.0.1/internal.xml', 'https://cdn.test/b'],
+    });
+  });
+
   it('reports RESPONSE_TOO_LARGE when the sitemap was cut at the body cap', async () => {
     mockFetchPage.mockResolvedValue({
       body: '<urlset><url><loc>https://exa',

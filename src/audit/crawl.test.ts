@@ -64,6 +64,15 @@ describe('auditCrawl fetch options', () => {
     expect(ctx.fetchOptions.cache?.size).toBe(0);
   });
 
+  it('skips sitemap URLs on a private address when the audited site is public', async () => {
+    const ctx = makeCtx({ sitemapUrls: ['http://169.254.169.254/latest/', 'https://example.com/page-1'] });
+
+    const findings = await auditCrawl(ctx);
+
+    expect(mockFetchPage.mock.calls.map(([u]) => u)).toEqual(['https://example.com/page-1']);
+    expect(findings).toEqual([]);
+  });
+
   it('reports RESPONSE_TOO_LARGE for a page cut at the body cap, and still audits what was read', async () => {
     mockFetchPage.mockResolvedValue({
       ...makePage(GOOD_HTML, { finalUrl: 'https://example.com/page-1' }),

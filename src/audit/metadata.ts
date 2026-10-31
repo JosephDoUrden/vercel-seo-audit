@@ -8,7 +8,7 @@ import {
   getTitle,
   getMetaTag,
 } from '../utils/html-parser.js';
-import { isSameOrigin } from '../utils/url.js';
+import { isSameOrigin, reachesPrivateAddress } from '../utils/url.js';
 
 export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
@@ -238,11 +238,14 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
       });
     }
 
-    // 8b. Verify og:image URL returns 2xx
+    // 8b. Verify og:image URL returns 2xx. One on a private address is not
+    // requested from a public site (see reachesPrivateAddress).
     try {
       const absoluteOgImage = ogImage.startsWith('http') ? ogImage : new URL(ogImage, finalUrl).href;
-      const { status } = await fetchHead(absoluteOgImage, fetchOptions);
-      if (status < 200 || status >= 300) {
+      const status = reachesPrivateAddress(absoluteOgImage, normalizedUrl)
+        ? undefined
+        : (await fetchHead(absoluteOgImage, fetchOptions)).status;
+      if (status !== undefined && (status < 200 || status >= 300)) {
         findings.push({
           code: 'OG_IMAGE_BROKEN',
           severity: 'warning',
@@ -304,8 +307,10 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
     // 9a. Verify twitter:image URL returns 2xx
     try {
       const absoluteTwitterImage = twitterImage.startsWith('http') ? twitterImage : new URL(twitterImage, finalUrl).href;
-      const { status } = await fetchHead(absoluteTwitterImage, fetchOptions);
-      if (status < 200 || status >= 300) {
+      const status = reachesPrivateAddress(absoluteTwitterImage, normalizedUrl)
+        ? undefined
+        : (await fetchHead(absoluteTwitterImage, fetchOptions)).status;
+      if (status !== undefined && (status < 200 || status >= 300)) {
         findings.push({
           code: 'TWITTER_IMAGE_BROKEN',
           severity: 'warning',

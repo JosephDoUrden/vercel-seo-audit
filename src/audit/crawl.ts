@@ -2,6 +2,7 @@ import type { AuditContext, AuditFinding } from '../types.js';
 import { DEFAULT_CRAWL_LIMIT, CRAWL_CONCURRENCY } from '../constants.js';
 import { fetchPage } from '../utils/http.js';
 import { responseTooLarge } from '../utils/tooLarge.js';
+import { reachesPrivateAddress } from '../utils/url.js';
 import {
   getNoindexDirective,
   getTitle,
@@ -18,7 +19,9 @@ export async function auditCrawl(ctx: AuditContext): Promise<AuditFinding[]> {
   }
 
   const limit = ctx.crawlLimit ?? DEFAULT_CRAWL_LIMIT;
-  const urls = ctx.sitemapUrls.slice(0, limit);
+  // The sitemap module already dropped URLs on other hosts; this keeps a
+  // private address out even when ctx.sitemapUrls was filled some other way.
+  const urls = ctx.sitemapUrls.filter((u) => !reachesPrivateAddress(u, ctx.normalizedUrl)).slice(0, limit);
   const total = urls.length;
 
   // Process in batches of CRAWL_CONCURRENCY

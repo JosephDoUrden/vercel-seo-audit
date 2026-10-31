@@ -1,6 +1,7 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchPage } from '../utils/http.js';
 import { getHreflangLinks } from '../utils/html-parser.js';
+import { reachesPrivateAddress } from '../utils/url.js';
 
 const LANG_CODE_RE = /^[a-z]{2}(-[a-z]{2})?$/;
 const MAX_RECIPROCAL_CHECKS = 10;
@@ -131,7 +132,9 @@ export async function auditI18n(ctx: AuditContext): Promise<AuditFinding[]> {
   const alternates = links.filter(
     (link) =>
       link.hreflang !== 'x-default' &&
-      normalizeForComparison(link.href) !== currentNormalized,
+      normalizeForComparison(link.href) !== currentNormalized &&
+      // Alternates may live on other hosts, but never on a private address.
+      !reachesPrivateAddress(link.href, normalizedUrl),
   );
 
   const toCheck = alternates.slice(0, MAX_RECIPROCAL_CHECKS);
