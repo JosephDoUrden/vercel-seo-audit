@@ -22,6 +22,8 @@ Beyond those, the audit covers redirect chains and loops, the trailing-slash 308
 npx vercel-seo-audit https://your-site.com
 ```
 
+![vercel-seo-audit running against a live site, with the redirect, sitemap, structured data and streamed-metadata modules](./docs/demo.gif)
+
 Install globally (optional):
 
 ```bash
