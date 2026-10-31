@@ -1,10 +1,15 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchHead, fetchPage } from '../utils/http.js';
-import { getImages } from '../utils/html-parser.js';
+import { getImages, type ImageInfo } from '../utils/html-parser.js';
 import { reachesPrivateAddress } from '../utils/url.js';
 
 const LARGE_FILE_THRESHOLD = 200 * 1024; // 200KB
 const MAX_HEAD_REQUESTS = 5;
+
+/** The images with no alt attribute at all; alt="" is a decorative image, not a missing one. */
+export function imagesMissingAlt(images: readonly ImageInfo[]): ImageInfo[] {
+  return images.filter((img) => !img.hasAlt);
+}
 
 export async function auditImages(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
@@ -26,7 +31,7 @@ export async function auditImages(ctx: AuditContext): Promise<AuditFinding[]> {
   const isNextjs = ctx.headers?.['x-powered-by']?.includes('Next.js') ?? false;
 
   // 1. Missing alt attribute
-  const missingAlt = images.filter((img) => !img.hasAlt);
+  const missingAlt = imagesMissingAlt(images);
   if (missingAlt.length > 0) {
     findings.push({
       code: 'IMG_MISSING_ALT',

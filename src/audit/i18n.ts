@@ -1,6 +1,6 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchPage } from '../utils/http.js';
-import { getHreflangLinks } from '../utils/html-parser.js';
+import { getHreflangLinks, type HreflangLink } from '../utils/html-parser.js';
 import { reachesPrivateAddress } from '../utils/url.js';
 
 const LANG_CODE_RE = /^[a-z]{2}(-[a-z]{2})?$/;
@@ -17,6 +17,12 @@ function normalizeForComparison(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** Whether one of the hreflang links points at the page itself. */
+export function hasHreflangSelfReference(links: readonly HreflangLink[], pageUrl: string): boolean {
+  const self = normalizeForComparison(pageUrl);
+  return links.some((link) => normalizeForComparison(link.href) === self);
 }
 
 export async function auditI18n(ctx: AuditContext): Promise<AuditFinding[]> {
@@ -75,9 +81,7 @@ export async function auditI18n(ctx: AuditContext): Promise<AuditFinding[]> {
 
   // Check self-reference
   const currentNormalized = normalizeForComparison(normalizedUrl);
-  const hasSelfRef = links.some(
-    (link) => normalizeForComparison(link.href) === currentNormalized,
-  );
+  const hasSelfRef = hasHreflangSelfReference(links, normalizedUrl);
   if (!hasSelfRef) {
     findings.push({
       code: 'HREFLANG_MISSING_SELF',

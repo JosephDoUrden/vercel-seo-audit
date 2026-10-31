@@ -374,8 +374,25 @@ When `--crawl` is enabled, every URL from the sitemap is fetched and audited for
 * Missing meta description
 * Missing or mismatched canonical URL
 * Missing JSON-LD structured data
+* Canonical tags in `<head>` that name different URLs (`CRAWL_PAGE_CANONICAL_MULTIPLE`), and a
+  relative canonical or one with a fragment (`CRAWL_PAGE_CANONICAL_RELATIVE`). The canonical
+  target is not fetched per page
+* hreflang tags that do not include the page itself (`CRAWL_PAGE_HREFLANG_MISSING_SELF`). The
+  x-default and reciprocal checks stay on the entry page
+* Images with no `alt` attribute, with the count (`CRAWL_PAGE_IMAGES_MISSING_ALT`)
+* A missing `og:title` or `og:image`, one finding per page (`CRAWL_PAGE_OG_MISSING`)
+* A title, description or canonical only in `<body>` for the audit's user agent
+  (`CRAWL_PAGE_METADATA_IN_BODY`). There is no second request as an HTML-limited bot per page, so
+  streamed Next.js metadata and tags that never reach `<head>` read the same here
 
-Progress is printed to stderr as each page is crawled.
+Across the crawled pages that answered 2xx:
+
+* Pages sharing a `<title>` (`CRAWL_DUPLICATE_TITLES`) or a meta description
+  (`CRAWL_DUPLICATE_DESCRIPTIONS`): one finding per shared value, up to 10, each listing up to 10 URLs
+* A canonical that points at another crawled page whose own canonical names a third URL
+  (`CRAWL_CANONICAL_CHAIN`)
+
+Each page is still fetched once. Progress is printed to stderr as each page is crawled.
 
 ### Internationalisation (hreflang)
 
