@@ -1,5 +1,5 @@
 import type { AuditContext, AuditFinding } from '../types.js';
-import { DEFAULT_PATHS, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
+import { AI_CRAWLERS, DEFAULT_PATHS, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
 import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
 import type * as cheerio from 'cheerio';
 import { parseHtml } from '../utils/html-parser.js';
@@ -9,12 +9,37 @@ import { getOrigin } from '../utils/url.js';
 
 type RobotsRule = RobotsGroup;
 
-function parseRobotsTxt(txt: string): { rules: RobotsRule[]; sitemaps: string[] } {
+/** One Content-Signal line and the user agents of the group it sits in (empty outside any group). */
+interface ContentSignal {
+  userAgents: string[];
+  signals: Record<string, string>;
+}
+
+// Cloudflare's Content Signals Policy (https://blog.cloudflare.com/content-signals-policy/, 24 Sep 2025,
+// modified 15 Jul 2026, read 31 Oct 2026) writes them as comma-separated name=value pairs inside a group:
+// "Content-Signal: search=yes, ai-train=no". The names are search, ai-input and ai-train; a name left out
+// expresses no preference.
+function parseContentSignal(value: string): Record<string, string> {
+  const signals: Record<string, string> = {};
+  for (const pair of value.split(',')) {
+    const [name, signal] = pair.split('=').map((s) => s.trim().toLowerCase());
+    if (name && signal) signals[name] = signal;
+  }
+  return signals;
+}
+
+function parseRobotsTxt(txt: string): {
+  rules: RobotsRule[];
+  sitemaps: string[];
+  contentSignals: ContentSignal[];
+} {
   // A # starts a comment anywhere on the line
   const lines = txt.split('\n').map((l) => l.replace(/#.*/, '').trim());
   const rules: RobotsRule[] = [];
   const sitemaps: string[] = [];
+  const contentSignals: ContentSignal[] = [];
   let current: RobotsRule | null = null;
+  let groupAgents: string[] = [];
   let lastWasUserAgent = false;
 
   for (const line of lines) {
@@ -30,6 +55,8 @@ function parseRobotsTxt(txt: string): { rules: RobotsRule[]; sitemaps: string[] 
         lastWasUserAgent && current
           ? { userAgent: value, disallow: current.disallow, allow: current.allow }
           : { userAgent: value, disallow: [], allow: [] };
+      if (!lastWasUserAgent) groupAgents = [];
+      groupAgents.push(value);
       rules.push(current);
       lastWasUserAgent = true;
       continue;
@@ -42,10 +69,13 @@ function parseRobotsTxt(txt: string): { rules: RobotsRule[]; sitemaps: string[] 
       if (value) current.allow.push(value);
     } else if (keyLower === 'sitemap') {
       if (value) sitemaps.push(value);
+    } else if (keyLower === 'content-signal') {
+      const signals = parseContentSignal(value);
+      if (Object.keys(signals).length > 0) contentSignals.push({ userAgents: groupAgents, signals });
     }
   }
 
-  return { rules, sitemaps };
+  return { rules, sitemaps, contentSignals };
 }
 
 export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
@@ -133,7 +163,7 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
     });
   }
 
-  const { rules, sitemaps } = parseRobotsTxt(robotsTxt);
+  const { rules, sitemaps, contentSignals } = parseRobotsTxt(robotsTxt);
 
   // Check for blocking all crawlers
   for (const rule of rules) {
@@ -173,6 +203,7 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
   }
 
   findings.push(...checkRenderAssets(ctx, rules, origin, robotsUrl));
+  findings.push(...checkAiCrawlers(rules, contentSignals, robotsUrl));
 
   // Check for sitemap directive
   if (sitemaps.length === 0) {
@@ -294,6 +325,69 @@ function checkRenderAssets(
         'Googlebot cannot fetch images served through the Next.js image optimiser, so they will not show in Google Images. Rendering is not affected.',
       suggestion: 'If the images should appear in image search, add Allow: /_next/image to the same group.',
       details: { blocked: image.blocked.slice(0, MAX_BLOCKED_LISTED), rule: image.rule, group: group.userAgent },
+      url: robotsUrl,
+    });
+  }
+
+  return findings;
+}
+
+type AiCrawlerClass = keyof typeof AI_CRAWLERS;
+type Access = 'allow' | 'block';
+
+const AI_CLASS_LABELS: Record<AiCrawlerClass, string> = { training: 'training', search: 'search', user: 'user fetch' };
+
+function rootAccess(rules: RobotsRule[], token: string): Access {
+  const group = selectRobotsGroup(rules, token);
+  return !group || matchRobots('/', group).allowed ? 'allow' : 'block';
+}
+
+function countSummary(access: Record<string, Access>): string {
+  const values = Object.values(access);
+  const blocked = values.filter((a) => a === 'block').length;
+  const allowed = values.length - blocked;
+  return [blocked && `${blocked} blocked`, allowed && `${allowed} allowed`].filter(Boolean).join(' and ');
+}
+
+function checkAiCrawlers(rules: RobotsRule[], contentSignals: ContentSignal[], robotsUrl: string): AuditFinding[] {
+  const matrix = {} as Record<AiCrawlerClass, Record<string, Access>>;
+  for (const cls of Object.keys(AI_CRAWLERS) as AiCrawlerClass[]) {
+    matrix[cls] = Object.fromEntries(AI_CRAWLERS[cls].map((token) => [token, rootAccess(rules, token)]));
+  }
+
+  const findings: AuditFinding[] = [];
+  const summary = (Object.keys(matrix) as AiCrawlerClass[])
+    .map((cls) => `${AI_CLASS_LABELS[cls]} ${countSummary(matrix[cls])}`)
+    .join(', ');
+  findings.push({
+    code: 'AI_CRAWLER_ACCESS',
+    severity: 'info',
+    category: 'robots',
+    message: `AI crawlers: ${summary}`,
+    explanation:
+      'Whether each AI crawler may fetch the site root, from the group robots.txt gives it, or the * group when it has none. Training crawlers feed model training, search crawlers decide whether the site appears in AI search answers, and user fetchers load a page a person asked about; OpenAI and Perplexity say their user fetchers may not follow robots.txt. This reads robots.txt only: an edge rule such as the Vercel AI Bots managed ruleset or a Cloudflare bot setting can block these crawlers regardless, and the audit cannot see that.',
+    suggestion: 'Nothing to fix. Check the matrix matches what you meant to allow.',
+    details: {
+      ...matrix,
+      source: 'robots.txt',
+      ...(contentSignals.length > 0 && { contentSignal: contentSignals }),
+    },
+    url: robotsUrl,
+  });
+
+  const blocked = Object.entries(matrix.search)
+    .filter(([, access]) => access === 'block')
+    .map(([token]) => token);
+  if (blocked.length > 0 && rootAccess(rules, 'googlebot') === 'allow') {
+    findings.push({
+      code: 'AI_SEARCH_BOT_BLOCKED',
+      severity: 'warning',
+      category: 'robots',
+      message: `robots.txt blocks ${blocked.join(', ')} but allows Googlebot`,
+      explanation:
+        'Search crawlers decide whether the site can appear, with a link, in AI search answers; blocking them takes it out of those answers while it stays in Google. That is usually a side effect of blocking AI bots wholesale. Blocking training crawlers such as GPTBot or ClaudeBot is a separate, legitimate choice the audit does not judge. This reads robots.txt only; an edge rule can block these crawlers regardless.',
+      suggestion: `If the site should appear in AI search answers, give ${blocked.join(', ')} a group with Allow: / and keep the training crawlers blocked.`,
+      details: { blocked },
       url: robotsUrl,
     });
   }

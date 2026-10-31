@@ -44,6 +44,30 @@ export const CRAWL_CONCURRENCY = 5;
 // https://developers.google.com/crawling/docs/robots-txt/robots-txt-spec, updated 23 Oct 2026.
 export const ROBOTS_TXT_MAX_BYTES = 500 * 1024;
 
+// AI crawler user-agent tokens, by what a block in robots.txt opts the site out of. Read 31 Oct 2026:
+// - Anthropic, https://support.claude.com/en/articles/8896518 (updated 07 Apr 2026): ClaudeBot collects
+//   content that "may be used for model training", Claude-SearchBot works "to improve search result
+//   quality for users", and "Claude-User supports Claude AI users".
+// - OpenAI, https://developers.openai.com/api/docs/bots (undated): "Disallowing GPTBot indicates a site's
+//   content should not be used in training generative AI foundation models", "OAI-SearchBot is used to
+//   surface websites in search results in ChatGPT's search features", and for ChatGPT-User "Because these
+//   actions are initiated by a user, robots.txt rules may not apply."
+// - Google, https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers (updated
+//   30 Oct 2026): Google-Extended is a "standalone product token" for whether content is used "for training
+//   future generations of Gemini models", and it "does not impact a site's inclusion in Google Search".
+// - Apple, https://support.apple.com/en-us/119829 (published 04 Sep 2026): "With Applebot-Extended, web
+//   publishers can choose to opt out of their website content being used to train Apple's general purpose
+//   foundation models", and "Webpages that disallow Applebot-Extended can still be included in search results."
+// - Common Crawl, https://commoncrawl.org/ccbot (undated): CCBot, blocked with "User-agent: CCBot".
+//   Its archive is a common source of training data, hence the training column.
+// - Perplexity, https://docs.perplexity.ai/guides/bots (undated): PerplexityBot is "designed to surface and
+//   link websites in search results on Perplexity", and Perplexity-User "generally ignores robots.txt rules".
+export const AI_CRAWLERS = {
+  training: ['GPTBot', 'ClaudeBot', 'Google-Extended', 'Applebot-Extended', 'CCBot'],
+  search: ['OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot'],
+  user: ['ChatGPT-User', 'Claude-User', 'Perplexity-User'],
+} as const;
+
 export const DEFAULT_PATHS = {
   robotsTxt: '/robots.txt',
   sitemapXml: '/sitemap.xml',
