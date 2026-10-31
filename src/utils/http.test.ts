@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { FetchCache } from '../types.js';
+import { MAX_BODY_BYTES } from '../constants.js';
 import { fetchPage, fetchHead, fetchWithoutRedirect, followRedirectChain } from './http.js';
 
 const mockFetch = vi.fn<typeof fetch>();
@@ -142,42 +143,125 @@ describe('fetchPage when the first hop is slow to answer', () => {
     vi.unstubAllGlobals();
   });
 
-  it('reports a body timeout from the fallback GET, not a bare abort', async () => {
+  it('reports a timeout, not a bare abort, and does not retry once the deadline has passed', async () => {
     let requests = 0;
-    let markClosed: () => void;
-    const stalledClosed = new Promise<void>((resolve) => {
-      markClosed = resolve;
-    });
-    const server = createServer((req, res) => {
+    const server = createServer((_req, res) => {
       requests++;
-      if (requests === 1) {
-        // Headers arrive after the 100ms deadline, so the redirect walk gives
-        // up and fetchPage falls back to a plain GET (the cold-start path).
-        setTimeout(() => res.writeHead(200).end('late'), 400);
-        return;
-      }
-      req.socket.once('close', () => markClosed());
-      res.writeHead(200, { 'content-type': 'text/html', 'content-length': 1000 });
-      res.write('<html>');
+      // Headers arrive after the 100ms deadline.
+      setTimeout(() => res.writeHead(200).end('late'), 400);
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address() as AddressInfo;
 
     try {
+      const started = Date.now();
       await expect(
         fetchPage(`http://127.0.0.1:${port}/slow`, { timeout: 100 }),
-      ).rejects.toThrow(/Timed out reading body/);
-
-      await Promise.race([
-        stalledClosed,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('fallback socket still open 500ms after the timeout')), 500),
-        ),
-      ]);
+      ).rejects.toThrow(/Timed out after 100 ms/);
+      expect(Date.now() - started).toBeLessThan(350);
+      expect(requests).toBe(1);
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+});
+
+// A fetch stand-in that answers after `delay` ms and rejects with the abort
+// reason when its signal fires first, as undici does.
+function delayed(delay: number, make: (url: string) => Response) {
+  return (input: string | URL | Request, init?: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(make(String(input))), delay);
+      init?.signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(init.signal?.reason);
+      });
+    });
+}
+
+describe('fetchPage deadline', () => {
+  it('spends one --timeout on the whole redirect chain, not one per hop', async () => {
+    let hop = 0;
+    mockFetch.mockImplementation(delayed(60, () => response(302, '', { location: `/hop${++hop}` })));
+
+    const started = Date.now();
+    await expect(fetchPage('https://example.com/', { timeout: 150 })).rejects.toThrow(
+      /Timed out after 150 ms/,
+    );
+
+    expect(Date.now() - started).toBeLessThan(300);
+    // 60 ms a hop against 150 ms in all: the third hop is cut off.
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives the body only what is left of the deadline', async () => {
+    const stalled = new Response(new ReadableStream({ start() {} }), { status: 200 });
+    mockFetch.mockImplementation(delayed(80, () => stalled));
+
+    const started = Date.now();
+    await expect(fetchPage('https://example.com/', { timeout: 120 })).rejects.toThrow(/Timed out reading body/);
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+
+  it('does not fall back to a second GET when the first hop fails', async () => {
+    mockFetch.mockRejectedValue(new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND x.invalid') }));
+
+    await expect(fetchPage('https://x.invalid/')).rejects.toThrow('fetch failed');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps hop failures out of followRedirectChain, which reports what it walked', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(301, '', { location: '/next' }))
+      .mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    const chain = await followRedirectChain('https://example.com/');
+
+    expect(chain.hops).toHaveLength(1);
+    expect(chain.finalUrl).toBe('https://example.com/next');
+  });
+
+  it('names the timeout on a HEAD that does not answer', async () => {
+    mockFetch.mockImplementation(delayed(200, () => response(200)));
+
+    await expect(fetchHead('https://example.com/a.png', { timeout: 30 })).rejects.toThrow(
+      /Timed out after 30 ms/,
+    );
+  });
+});
+
+describe('fetchPage body cap', () => {
+  it('stops reading at MAX_BODY_BYTES, marks the page truncated and closes the stream', async () => {
+    const chunk = new Uint8Array(1024 * 1024).fill(0x61);
+    let cancelled = false;
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    mockFetch.mockResolvedValueOnce(new Response(endless, { status: 200, headers: { 'content-type': 'text/html' } }));
+
+    const page = await fetchPage('https://example.com/');
+
+    expect(page.body.length).toBe(MAX_BODY_BYTES);
+    expect(page.truncated).toBe(true);
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThanOrEqual(MAX_BODY_BYTES / chunk.length + 2);
+  });
+
+  it('leaves a body under the cap alone', async () => {
+    mockFetch.mockResolvedValueOnce(response(200, 'small'));
+
+    const page = await fetchPage('https://example.com/');
+
+    expect(page.body).toBe('small');
+    expect(page.truncated).toBeUndefined();
   });
 });
 

@@ -63,6 +63,18 @@ describe('auditCrawl fetch options', () => {
     });
     expect(ctx.fetchOptions.cache?.size).toBe(0);
   });
+
+  it('reports RESPONSE_TOO_LARGE for a page cut at the body cap, and still audits what was read', async () => {
+    mockFetchPage.mockResolvedValue({
+      ...makePage(GOOD_HTML, { finalUrl: 'https://example.com/page-1' }),
+      truncated: true,
+    });
+
+    const findings = await auditCrawl(makeCtx({ sitemapUrls: ['https://example.com/page-1'] }));
+
+    expect(findings.map((f) => f.code)).toEqual(['RESPONSE_TOO_LARGE']);
+    expect(findings[0]).toMatchObject({ category: 'crawl', url: 'https://example.com/page-1' });
+  });
 });
 
 function makeGoodHtml(pageUrl: string): string {

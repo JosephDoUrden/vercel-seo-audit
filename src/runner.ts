@@ -12,6 +12,7 @@ import { MODULE_IDS } from './types.js';
 import { normalizeUrl } from './utils/url.js';
 import { fetchPage } from './utils/http.js';
 import { isNextjsPage } from './utils/nextjs.js';
+import { responseTooLarge } from './utils/tooLarge.js';
 import {
   auditRedirects,
   auditRobots,
@@ -197,6 +198,7 @@ export async function runAudit(
     pageFacts.status = page.status;
     pageFacts.finalUrl = page.finalUrl;
     pageFacts.nextjs = isNextjsPage(Object.fromEntries(page.headers.entries()), page.body);
+    if (page.truncated) targetFindings.push(responseTooLarge(normalized, 'performance', page.headers));
     if (page.status >= 200 && page.status < 300) {
       const contentType = page.headers.get('content-type');
       isHtml = isHtmlType(contentType) && page.body.trim() !== '';

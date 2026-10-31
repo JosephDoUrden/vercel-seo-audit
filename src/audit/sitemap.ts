@@ -4,6 +4,7 @@ import { fetchPage, fetchHead, followRedirectChain } from '../utils/http.js';
 import { parseSitemapXml } from '../utils/xml-parser.js';
 import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
 import { getOrigin } from '../utils/url.js';
+import { responseTooLarge } from '../utils/tooLarge.js';
 
 export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
@@ -50,6 +51,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
       });
       return findings;
     }
+    if (res.truncated) findings.push(responseTooLarge(sitemapUrl, 'sitemap', res.headers));
     sitemapBody = res.body;
   } catch {
     findings.push({
@@ -89,6 +91,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
       try {
         const childRes = await fetchPage(childUrl, ctx.fetchOptions);
         if (childRes.status === 200) {
+          if (childRes.truncated) findings.push(responseTooLarge(childUrl, 'sitemap', childRes.headers));
           const childParsed = parseSitemapXml(childRes.body);
           if (childParsed.type === 'urlset') {
             allUrls.push(...childParsed.urls.map((u) => u.loc));

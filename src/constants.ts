@@ -1,5 +1,9 @@
 export const DEFAULT_TIMEOUT = 10_000;
 export const MAX_REDIRECTS = 20;
+// Bodies are read up to this many bytes and the rest is dropped, so a huge or endless
+// response cannot exhaust memory. One cap for every response: Google's limit for an
+// uncompressed sitemap (50 MB), far above any HTML page worth auditing.
+export const MAX_BODY_BYTES = 50 * 1024 * 1024;
 export const USER_AGENT = 'vercel-seo-audit/2.10.0'; // x-release-please-version
 export const SITEMAP_SAMPLE_SIZE = 10;
 

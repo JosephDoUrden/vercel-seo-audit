@@ -527,6 +527,30 @@ describe('runAudit when the target cannot be audited', () => {
     for (const mock of htmlModules()) expect(mock).not.toHaveBeenCalled();
   });
 
+  it('reports RESPONSE_TOO_LARGE for a page cut at the body cap and audits what was read', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html><head><title>Big</title></head>',
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html', 'content-length': '314572800' }),
+      finalUrl: 'https://example.com/',
+      truncated: true,
+    });
+
+    const report = await runAudit('https://example.com');
+    const target = report.modules.find((m) => m.module === 'target');
+
+    expect(target?.findings).toEqual([
+      expect.objectContaining({
+        code: 'RESPONSE_TOO_LARGE',
+        severity: 'warning',
+        category: 'performance',
+        url: 'https://example.com/',
+        details: { bytes: 314572800, limit: 50 * 1024 * 1024 },
+      }),
+    ]);
+    expect(mockMetadata.mock.calls[0][0].html).toBe('<html><head><title>Big</title></head>');
+  });
+
   it('keeps an only selection to the header modules it named', async () => {
     mockFetchPage.mockResolvedValue({
       body: '%PDF',

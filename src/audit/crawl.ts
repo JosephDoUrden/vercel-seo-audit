@@ -1,6 +1,7 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { DEFAULT_CRAWL_LIMIT, CRAWL_CONCURRENCY } from '../constants.js';
 import { fetchPage } from '../utils/http.js';
+import { responseTooLarge } from '../utils/tooLarge.js';
 import {
   getNoindexDirective,
   getTitle,
@@ -58,6 +59,7 @@ async function auditPage(
     body = res.body;
     status = res.status;
     headers = res.headers;
+    if (res.truncated) findings.push(responseTooLarge(pageUrl, 'crawl', headers));
   } catch {
     findings.push({
       code: 'CRAWL_PAGE_ERROR',

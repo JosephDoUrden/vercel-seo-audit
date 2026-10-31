@@ -94,7 +94,7 @@ vercel-seo-audit https://your-site.com --json
 # Verbose mode — raw HTTP details for each finding
 vercel-seo-audit https://your-site.com --verbose
 
-# Custom timeout (default: 10s)
+# Custom timeout per request (default: 10s), covering every redirect hop and the body
 vercel-seo-audit https://your-site.com --timeout 15000
 
 # Check specific pages for redirect issues
@@ -224,6 +224,9 @@ The page is fetched once before any module runs.
   `application/xhtml+xml`) or has an empty body: `TARGET_NOT_HTML` (warning). The modules that
   read HTML are skipped; `robots`, `redirects`, `sitemap`, `nextjs`, `security`, `vercel` and
   `crawl` still run. A response without a `content-type` is read as HTML
+* Any body is read up to 50 MiB and cut there. The audited page, a sitemap or a crawled page
+  cut that way gets `RESPONSE_TOO_LARGE` (warning, `details.bytes` from `content-length`),
+  and the checks read the part that came in
 
 ### Redirects
 

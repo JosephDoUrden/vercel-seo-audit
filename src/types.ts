@@ -41,6 +41,8 @@ export const ISSUE_CODES = [
   'TARGET_UNREACHABLE',
   'TARGET_HTTP_ERROR',
   'TARGET_NOT_HTML',
+  // A response cut at MAX_BODY_BYTES (the audited page, a sitemap or a crawled page)
+  'RESPONSE_TOO_LARGE',
   // Indexing issues
   'NOINDEX_DETECTED',
   'X_ROBOTS_NOINDEX',

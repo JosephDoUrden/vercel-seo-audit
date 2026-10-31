@@ -321,4 +321,52 @@ describe('auditSitemap', () => {
     expect(findings[0].url).toBe('https://example.com/sitemap.xml');
     expect(findings[0].details).toEqual({ status: 403, provider: 'cloudflare', header: 'cf-mitigated' });
   });
+
+  it('reports RESPONSE_TOO_LARGE when the sitemap was cut at the body cap', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<urlset><url><loc>https://exa',
+      status: 200,
+      headers: new Headers({ 'content-length': '73400320' }),
+      finalUrl: 'https://example.com/sitemap.xml',
+      truncated: true,
+    });
+    mockParseSitemapXml.mockImplementation(() => {
+      throw new Error('unclosed tag');
+    });
+
+    const findings = await auditSitemap(makeCtx());
+    const large = findings.find((f) => f.code === 'RESPONSE_TOO_LARGE');
+
+    expect(large).toMatchObject({
+      severity: 'warning',
+      category: 'sitemap',
+      url: 'https://example.com/sitemap.xml',
+      details: { bytes: 73400320, limit: 50 * 1024 * 1024 },
+    });
+  });
+
+  it('reports RESPONSE_TOO_LARGE for a child sitemap that was cut', async () => {
+    mockFetchPage
+      .mockResolvedValueOnce({
+        body: '<sitemapindex></sitemapindex>',
+        status: 200,
+        headers: new Headers(),
+        finalUrl: 'https://example.com/sitemap.xml',
+      })
+      .mockResolvedValueOnce({
+        body: '<urlset>',
+        status: 200,
+        headers: new Headers(),
+        finalUrl: 'https://example.com/sitemap-1.xml',
+        truncated: true,
+      });
+    mockParseSitemapXml
+      .mockReturnValueOnce({ type: 'sitemapindex', urls: [], sitemaps: ['https://example.com/sitemap-1.xml'] })
+      .mockReturnValueOnce({ type: 'urlset', urls: [{ loc: 'https://example.com/a' }], sitemaps: [] });
+
+    const findings = await auditSitemap(makeCtx());
+    const large = findings.find((f) => f.code === 'RESPONSE_TOO_LARGE');
+
+    expect(large).toMatchObject({ url: 'https://example.com/sitemap-1.xml', details: { bytes: null } });
+  });
 });
