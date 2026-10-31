@@ -440,6 +440,48 @@ describe('auditSitemap', () => {
     });
   });
 
+  it('does not count a private address the sitemap tried to redirect to as the site host', async () => {
+    mockFollowRedirectChain.mockResolvedValue({
+      hops: [{ url: 'https://example.com/sitemap.xml', status: 302, location: 'http://10.0.0.1/sitemap.xml' }],
+      finalUrl: 'http://10.0.0.1/sitemap.xml',
+      isCircular: false,
+    });
+    mockFetchPage.mockResolvedValue({
+      body: '<urlset></urlset>',
+      status: 200,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/sitemap.xml',
+    });
+    mockParseSitemapXml.mockReturnValue({
+      type: 'urlset',
+      urls: [{ loc: 'http://10.0.0.1/admin' }, { loc: 'https://example.com/a' }],
+      sitemaps: [],
+    });
+    mockFetchHead.mockResolvedValue({ status: 200, headers: new Headers() });
+
+    const ctx = makeCtx();
+    const findings = await auditSitemap(ctx);
+
+    expect(mockFetchHead.mock.calls.map(([u]) => u)).toEqual(['https://example.com/a']);
+    expect(ctx.sitemapUrls).toEqual(['https://example.com/a']);
+    expect(findings.find((f) => f.code === 'SITEMAP_CROSS_HOST_URLS')?.details).toMatchObject({ count: 1 });
+  });
+
+  it('reads sitemaps up to MAX_SITEMAP_BYTES, through the shared cache', async () => {
+    const cache = new Map();
+    mockFetchPage.mockResolvedValue({
+      body: '<urlset></urlset>',
+      status: 200,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/sitemap.xml',
+    });
+    mockParseSitemapXml.mockReturnValue({ type: 'urlset', urls: [], sitemaps: [] });
+
+    await auditSitemap(makeCtx({ fetchOptions: { cache } }));
+
+    expect(mockFetchPage.mock.calls[0][1]).toEqual({ cache, maxBytes: 50_000_000 });
+  });
+
   it('reports RESPONSE_TOO_LARGE when the sitemap was cut at the body cap', async () => {
     mockFetchPage.mockResolvedValue({
       body: '<urlset><url><loc>https://exa',
@@ -459,7 +501,7 @@ describe('auditSitemap', () => {
       severity: 'warning',
       category: 'sitemap',
       url: 'https://example.com/sitemap.xml',
-      details: { bytes: 73400320, limit: 50 * 1024 * 1024 },
+      details: { bytes: 73400320, limit: 50_000_000 },
     });
   });
 

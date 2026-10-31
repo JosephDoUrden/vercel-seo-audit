@@ -1,9 +1,9 @@
 import type { AuditContext, AuditFinding } from '../types.js';
-import { DEFAULT_PATHS, SITEMAP_SAMPLE_SIZE } from '../constants.js';
+import { DEFAULT_PATHS, MAX_SITEMAP_BYTES, SITEMAP_SAMPLE_SIZE } from '../constants.js';
 import { fetchPage, fetchHead, followRedirectChain } from '../utils/http.js';
 import { parseSitemapXml } from '../utils/xml-parser.js';
 import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
-import { getOrigin, isSameHost } from '../utils/url.js';
+import { getOrigin, isSameHost, reachesPrivateAddress } from '../utils/url.js';
 import { responseTooLarge } from '../utils/tooLarge.js';
 
 const CROSS_HOST_EXAMPLES = 5;
@@ -51,7 +51,11 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
   // URLs on another host are counted, reported once and never requested. That
   // also keeps a public sitemap from pointing the audit at a private address.
   // The hosts the page and the sitemap redirected to count as this site's own.
-  const ownHosts = [sitemapUrl, chain.finalUrl, ctx.finalUrl ?? sitemapUrl];
+  // A redirect the walk refused to follow ends on a private address; that is
+  // not this site's host.
+  const ownHosts = [sitemapUrl, ctx.finalUrl ?? sitemapUrl];
+  if (!reachesPrivateAddress(chain.finalUrl, sitemapUrl)) ownHosts.push(chain.finalUrl);
+  const sitemapFetch = { ...ctx.fetchOptions, maxBytes: MAX_SITEMAP_BYTES };
   const offHost: string[] = [];
   const onHost = (url: string): boolean => {
     // An unparsable URL is left to fail on its own, as before.
@@ -63,7 +67,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
   // 2. Fetch and parse the sitemap
   let sitemapBody: string;
   try {
-    const res = await fetchPage(sitemapUrl, ctx.fetchOptions);
+    const res = await fetchPage(sitemapUrl, sitemapFetch);
     if (res.status !== 200) {
       const challenge = detectChallenge(res.headers, res.status);
       if (challenge) {
@@ -83,7 +87,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
       });
       return findings;
     }
-    if (res.truncated) findings.push(responseTooLarge(sitemapUrl, 'sitemap', res.headers));
+    if (res.truncated) findings.push(responseTooLarge(sitemapUrl, 'sitemap', res.headers, 'sitemap'));
     sitemapBody = res.body;
   } catch {
     findings.push({
@@ -121,9 +125,9 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
     const allUrls: string[] = [];
     for (const childUrl of parsed.sitemaps.filter(onHost)) {
       try {
-        const childRes = await fetchPage(childUrl, ctx.fetchOptions);
+        const childRes = await fetchPage(childUrl, sitemapFetch);
         if (childRes.status === 200) {
-          if (childRes.truncated) findings.push(responseTooLarge(childUrl, 'sitemap', childRes.headers));
+          if (childRes.truncated) findings.push(responseTooLarge(childUrl, 'sitemap', childRes.headers, 'sitemap'));
           const childParsed = parseSitemapXml(childRes.body);
           if (childParsed.type === 'urlset') {
             allUrls.push(...childParsed.urls.map((u) => u.loc).filter(onHost));

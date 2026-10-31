@@ -60,6 +60,7 @@ describe('auditCrawl fetch options', () => {
     expect(mockFetchPage).toHaveBeenCalledWith('https://example.com/page-1', {
       timeout: 1234,
       userAgent: 'bot',
+      auditedUrl: 'https://example.com/',
     });
     expect(ctx.fetchOptions.cache?.size).toBe(0);
   });

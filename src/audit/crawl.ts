@@ -58,7 +58,7 @@ async function auditPage(
   // body in memory until the audit ends.
   const { timeout, userAgent } = ctx.fetchOptions;
   try {
-    const res = await fetchPage(pageUrl, { timeout, userAgent });
+    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl });
     body = res.body;
     status = res.status;
     headers = res.headers;

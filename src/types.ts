@@ -43,7 +43,7 @@ export const ISSUE_CODES = [
   'TARGET_NOT_HTML',
   // An audit module that threw instead of returning findings
   'MODULE_FAILED',
-  // A response cut at MAX_BODY_BYTES (the audited page, a sitemap or a crawled page)
+  // A response cut at MAX_HTML_BYTES or MAX_SITEMAP_BYTES (the audited page, a sitemap or a crawled page)
   'RESPONSE_TOO_LARGE',
   // Indexing issues
   'NOINDEX_DETECTED',
@@ -249,6 +249,13 @@ export interface FetchOptions {
   timeout?: number;
   userAgent?: string;
   cache?: FetchCache;
+  /** Bytes of body to read before cutting it; MAX_HTML_BYTES when unset. */
+  maxBytes?: number;
+  /**
+   * The URL being audited. When it is public, no request goes to a private address,
+   * start URL or redirect hop alike. Unset, each call is judged by its own start URL.
+   */
+  auditedUrl?: string;
 }
 
 export interface AuditContext {

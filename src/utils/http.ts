@@ -1,4 +1,4 @@
-import { DEFAULT_TIMEOUT, MAX_BODY_BYTES, MAX_REDIRECTS, USER_AGENT } from '../constants.js';
+import { DEFAULT_TIMEOUT, MAX_HTML_BYTES, MAX_REDIRECTS, USER_AGENT } from '../constants.js';
 import type { FetchOptions, RedirectChain, RedirectHop } from '../types.js';
 import { reachesPrivateAddress } from './url.js';
 
@@ -49,6 +49,26 @@ function abortAt(controller: AbortController, deadline: number, url: string, opt
   );
 }
 
+/** A redirect walk that went round in a circle (`loop`) or ran past MAX_REDIRECTS (`limit`). */
+export class RedirectError extends Error {
+  constructor(
+    readonly kind: 'loop' | 'limit',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RedirectError';
+  }
+}
+
+// The URL whose network the call may reach: the audited one when known.
+function auditedFrom(url: string, opts?: FetchOptions): string {
+  return opts?.auditedUrl ?? url;
+}
+
+function refused(url: string): Error {
+  return new Error(`Refused to fetch the private address ${new URL(url).hostname}`);
+}
+
 // The controller behind each hop response, kept so a body read that times out
 // can tear the connection down after the header timer has already been cleared.
 const hopControllers = new WeakMap<Response, AbortController>();
@@ -79,9 +99,9 @@ export function fetchWithoutRedirect(
   return fetchHop(url, opts, deadlineFor(opts));
 }
 
-// Walks redirects hop by hop. `response` is the first non-redirect response,
-// or undefined when a hop failed (`error`) or MAX_REDIRECTS ran out. A hop from
-// a public URL to a private address is recorded but never requested.
+// Walks redirects hop by hop. `response` is the first non-redirect response;
+// otherwise `error` says why there is none: a failed hop, a loop, too many hops,
+// or a private address reached from a public audit (recorded, never requested).
 async function walkRedirects(
   url: string,
   opts: FetchOptions | undefined,
@@ -89,11 +109,17 @@ async function walkRedirects(
 ): Promise<{ chain: RedirectChain; response?: Response; error?: unknown }> {
   const hops: RedirectHop[] = [];
   const seen = new Set<string>();
+  const from = auditedFrom(url, opts);
   let current = url;
+
+  if (reachesPrivateAddress(url, from)) {
+    return { chain: { hops, finalUrl: url, isCircular: false }, error: refused(url) };
+  }
 
   for (let i = 0; i < MAX_REDIRECTS; i++) {
     if (seen.has(current)) {
-      return { chain: { hops, finalUrl: current, isCircular: true } };
+      const error = new RedirectError('loop', `Redirect loop at ${current}`);
+      return { chain: { hops, finalUrl: current, isCircular: true }, error };
     }
     seen.add(current);
 
@@ -110,7 +136,7 @@ async function walkRedirects(
     if (location && status >= 300 && status < 400) {
       const resolved = new URL(location, current).href;
       hops.push({ url: current, status, location: resolved });
-      if (reachesPrivateAddress(resolved, url)) {
+      if (reachesPrivateAddress(resolved, from)) {
         const error = new Error(`Refused to follow a redirect to the private address ${new URL(resolved).hostname}`);
         return { chain: { hops, finalUrl: resolved, isCircular: false }, error };
       }
@@ -120,7 +146,8 @@ async function walkRedirects(
     }
   }
 
-  return { chain: { hops, finalUrl: current, isCircular: false } };
+  const error = new RedirectError('limit', `More than ${MAX_REDIRECTS} redirects from ${url}`);
+  return { chain: { hops, finalUrl: current, isCircular: false }, error };
 }
 
 export async function followRedirectChain(
@@ -137,8 +164,8 @@ type BodyResult = { body: string; truncated?: true };
 // body is read through a reader with what is left of the deadline. On timeout
 // the hop's controller is aborted and the reader cancelled, which closes the
 // socket; `res.text()` would have locked the stream and left it open. Reading
-// stops at MAX_BODY_BYTES the same way, keeping what came before the cap.
-async function readBody(res: Response, deadline: number): Promise<BodyResult> {
+// stops at `maxBytes` the same way, keeping what came before the cap.
+async function readBody(res: Response, deadline: number, maxBytes: number): Promise<BodyResult> {
   if (!res.body) return { body: '' };
 
   const reader = res.body.getReader();
@@ -160,8 +187,8 @@ async function readBody(res: Response, deadline: number): Promise<BodyResult> {
     for (;;) {
       const { done, value } = await Promise.race([reader.read(), expired]);
       if (done) break;
-      if (bytes + value.byteLength > MAX_BODY_BYTES) {
-        chunks.push(decoder.decode(value.subarray(0, MAX_BODY_BYTES - bytes), { stream: true }));
+      if (bytes + value.byteLength > maxBytes) {
+        chunks.push(decoder.decode(value.subarray(0, maxBytes - bytes), { stream: true }));
         truncated = true;
         await close();
         break;
@@ -181,13 +208,17 @@ async function readBody(res: Response, deadline: number): Promise<BodyResult> {
 
 type PageResult = BodyResult & { status: number; headers: Headers };
 
+const maxBytesOf = (opts?: FetchOptions): number => opts?.maxBytes ?? MAX_HTML_BYTES;
+
 async function fetchFollowing(url: string, opts: FetchOptions | undefined, deadline: number): Promise<PageResult> {
   const controller = new AbortController();
   const timer = abortAt(controller, deadline, url, opts);
 
   try {
+    // Manual, like every request here: native redirects would skip the
+    // private-address check.
     const res = await fetch(url, {
-      redirect: 'follow',
+      redirect: 'manual',
       signal: controller.signal,
       headers: buildHeaders(opts?.userAgent),
     });
@@ -197,7 +228,7 @@ async function fetchFollowing(url: string, opts: FetchOptions | undefined, deadl
     // main path instead of a bare abort.
     clearTimeout(timer);
     hopControllers.set(res, controller);
-    return { ...(await readBody(res, deadline)), status: res.status, headers: res.headers };
+    return { ...(await readBody(res, deadline, maxBytesOf(opts))), status: res.status, headers: res.headers };
   } finally {
     clearTimeout(timer);
   }
@@ -205,7 +236,9 @@ async function fetchFollowing(url: string, opts: FetchOptions | undefined, deadl
 
 /**
  * GETs `url`, following redirects, within one `--timeout` for the whole call.
- * The body is cut at MAX_BODY_BYTES, and `truncated` is set when it was.
+ * The body is cut at `opts.maxBytes` (MAX_HTML_BYTES by default), and
+ * `truncated` is set when it was. A loop or a chain past MAX_REDIRECTS rejects
+ * with a RedirectError.
  */
 export function fetchPage(
   url: string,
@@ -214,18 +247,17 @@ export function fetchPage(
   return cached(opts, `GET ${url}`, async () => {
     const deadline = deadlineFor(opts);
     const { chain, response, error } = await walkRedirects(url, opts, deadline);
-    // A hop that failed has used up the deadline or will fail again; retrying
-    // it as a plain GET only doubles the wait on a dead host.
-    if (error !== undefined) throw error;
+    // A hop that failed has used up the deadline or will fail again, and a
+    // loop stays a loop; retrying as a plain GET only doubles the wait.
+    if (error !== undefined || !response) throw error;
     const finalUrl = chain.finalUrl;
 
     // The last hop already carries the page. Its text is cached under the
     // final URL so chains that converge on one page share a single read; a
-    // body some other caller has consumed, or a walk that ran out of hops,
-    // falls through to a plain GET.
+    // body some other caller has consumed falls through to a fresh GET.
     const page = await cached(opts, `PAGE ${finalUrl}`, async (): Promise<PageResult> => {
-      if (response && !response.bodyUsed) {
-        return { ...(await readBody(response, deadline)), status: response.status, headers: response.headers };
+      if (!response.bodyUsed) {
+        return { ...(await readBody(response, deadline, maxBytesOf(opts))), status: response.status, headers: response.headers };
       }
       return fetchFollowing(finalUrl, opts, deadline);
     });
@@ -245,6 +277,8 @@ export function fetchHead(
     // Redirects are walked here rather than by fetch, so each hop can be
     // checked before it is requested.
     try {
+      const from = auditedFrom(url, opts);
+      if (reachesPrivateAddress(url, from)) throw refused(url);
       let current = url;
       for (let i = 0; ; i++) {
         const res = await fetch(current, {
@@ -258,7 +292,7 @@ export function fetchHead(
           return { status: res.status, headers: res.headers };
         }
         const next = new URL(location, current).href;
-        if (reachesPrivateAddress(next, url)) {
+        if (reachesPrivateAddress(next, from)) {
           throw new Error(`Refused to follow a redirect to the private address ${new URL(next).hostname}`);
         }
         current = next;

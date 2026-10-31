@@ -11,7 +11,7 @@ import type {
 } from './types.js';
 import { MODULE_IDS } from './types.js';
 import { normalizeUrl } from './utils/url.js';
-import { fetchPage } from './utils/http.js';
+import { fetchPage, RedirectError } from './utils/http.js';
 import { isNextjsPage } from './utils/nextjs.js';
 import { responseTooLarge } from './utils/tooLarge.js';
 import { detectChallenge } from './utils/challenge.js';
@@ -204,6 +204,7 @@ export async function runAudit(
     timeout: opts.timeout,
     userAgent: opts.userAgent,
     cache: new Map(),
+    auditedUrl: normalized,
   };
 
   const ctx: AuditContext = {
@@ -218,7 +219,8 @@ export async function runAudit(
   // Phase 0: fetch the page once and share it. A non-2xx page is reported, but
   // not shared, and is dropped from the cache, so the modules try again for
   // themselves and report what they can. A page that cannot be fetched at all
-  // stops the audit: every module would only report the same dead host.
+  // stops the audit: every module would only report the same dead host. A
+  // redirect loop does not; the modules run without the page.
   const pageFacts: PageFacts = { status: null, finalUrl: null, nextjs: false };
   const targetFindings: AuditFinding[] = [];
   let reached = false;
@@ -245,7 +247,10 @@ export async function runAudit(
       fetchOptions.cache?.clear();
     }
   } catch (err) {
-    targetFindings.push(unreachable(normalized, describeError(err)));
+    // A redirect loop or a chain past MAX_REDIRECTS is the site answering; the
+    // redirects module reports it, and the HTML modules find no page.
+    if (err instanceof RedirectError) reached = true;
+    else targetFindings.push(unreachable(normalized, describeError(err)));
   }
 
   // Phases 1-3. Crawl runs when --crawl is set, or when it is named in only.

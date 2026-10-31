@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runAudit, phases } from './runner.js';
 import { MODULE_IDS } from './types.js';
 
-vi.mock('./utils/http.js', () => ({
+vi.mock('./utils/http.js', async (importOriginal) => ({
+  RedirectError: (await importOriginal<typeof import('./utils/http.js')>()).RedirectError,
   fetchPage: vi.fn(),
 }));
 
@@ -23,7 +24,7 @@ vi.mock('./audit/index.js', () => ({
   auditStreamedMetadata: vi.fn(),
 }));
 
-import { fetchPage } from './utils/http.js';
+import { fetchPage, RedirectError } from './utils/http.js';
 import {
   auditRedirects,
   auditRobots,
@@ -421,6 +422,28 @@ describe('runAudit when the target cannot be audited', () => {
     expect(report.page).toEqual({ status: null, finalUrl: null, nextjs: false });
   });
 
+  it.each([
+    ['loop', 'Redirect loop at https://example.com/loop/0'],
+    ['limit', 'More than 20 redirects from https://example.com/loop/0'],
+  ] as const)('runs the modules on a redirect %s instead of calling the target unreachable', async (kind, message) => {
+    mockFetchPage.mockRejectedValue(new RedirectError(kind, message));
+
+    const report = await runAudit('https://example.com/loop/0');
+
+    expect(report.modules.map((m) => m.module)).not.toContain('target');
+    expect(mockRedirects).toHaveBeenCalledTimes(1);
+    expect(mockMetadata).toHaveBeenCalledTimes(1);
+    expect(mockRedirects.mock.calls[0][0].html).toBeUndefined();
+    expect(report.page).toEqual({ status: null, finalUrl: null, nextjs: false });
+  });
+
+  it('tells every fetch which URL is being audited, for the private-address check', async () => {
+    await runAudit('https://example.com/a');
+
+    expect(mockFetchPage.mock.calls[0][1]).toMatchObject({ auditedUrl: 'https://example.com/a' });
+    expect(mockRobots.mock.calls[0][0].fetchOptions.auditedUrl).toBe('https://example.com/a');
+  });
+
   it('uses the plain message when the error has no cause', async () => {
     mockFetchPage.mockRejectedValue(new Error('Timed out after 2000 ms fetching https://example.com/'));
 
@@ -583,7 +606,7 @@ describe('runAudit when the target cannot be audited', () => {
         severity: 'warning',
         category: 'performance',
         url: 'https://example.com/',
-        details: { bytes: 314572800, limit: 50 * 1024 * 1024 },
+        details: { bytes: 314572800, limit: 10 * 1024 * 1024 },
       }),
     ]);
     expect(mockMetadata.mock.calls[0][0].html).toBe('<html><head><title>Big</title></head>');

@@ -97,7 +97,8 @@ function isPrivateIpv4(host: string): boolean {
  * the name can resolve differently when the request is made.
  */
 export function isPrivateAddress(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  // A trailing dot is the same name in DNS: `localhost.` is `localhost`.
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (host === 'localhost' || host.endsWith('.localhost')) return true;
   if (!host.includes(':')) return isPrivateIpv4(host);
 

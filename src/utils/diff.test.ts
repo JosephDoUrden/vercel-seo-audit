@@ -83,4 +83,20 @@ describe('diffReports', () => {
     expect(diff.resolvedIssues.map((f) => f.code)).toEqual(['FAVICON_MISSING']);
     expect(diff.newIssues.map((f) => f.code)).toEqual(['TITLE_MISSING']);
   });
+
+  it('keeps the target findings in the diff whatever only says', () => {
+    const previous = report([
+      { module: 'target', findings: [finding('TARGET_HTTP_ERROR')] },
+      { module: 'vercel', findings: [] },
+    ], ['vercel']);
+    const current = report([
+      { module: 'target', findings: [finding('TARGET_NOT_HTML')] },
+      { module: 'vercel', findings: [] },
+    ], ['vercel']);
+
+    const diff = diffReports(current, previous);
+
+    expect(diff.newIssues.map((f) => f.code)).toEqual(['TARGET_NOT_HTML']);
+    expect(diff.resolvedIssues.map((f) => f.code)).toEqual(['TARGET_HTTP_ERROR']);
+  });
 });

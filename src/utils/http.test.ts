@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { FetchCache } from '../types.js';
-import { MAX_BODY_BYTES } from '../constants.js';
-import { fetchPage, fetchHead, fetchWithoutRedirect, followRedirectChain } from './http.js';
+import { MAX_HTML_BYTES, MAX_REDIRECTS, MAX_SITEMAP_BYTES } from '../constants.js';
+import { fetchPage, fetchHead, fetchWithoutRedirect, followRedirectChain, RedirectError } from './http.js';
 
 const mockFetch = vi.fn<typeof fetch>();
 
@@ -62,7 +62,7 @@ describe('fetchPage', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back to a follow GET when something else consumed the cached response', async () => {
+  it('falls back to a fresh manual GET when something else consumed the cached response', async () => {
     const cache: FetchCache = new Map();
     mockFetch
       .mockResolvedValueOnce(response(200, '<html>first</html>'))
@@ -74,7 +74,34 @@ describe('fetchPage', () => {
 
     expect(page.body).toBe('<html>again</html>');
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockFetch.mock.calls[1][1]).toMatchObject({ redirect: 'follow' });
+    // Never 'follow': native redirects would skip the private-address check.
+    expect(mockFetch.mock.calls[1][1]).toMatchObject({ redirect: 'manual' });
+  });
+
+  it('rejects with a RedirectError on a loop, without handing the URL to native redirects', async () => {
+    mockFetch.mockImplementation(async (input) => {
+      const n = Number(String(input).split('/').pop());
+      return response(302, '', { location: `/loop/${(n + 1) % 3}` });
+    });
+
+    const err = await fetchPage('https://example.com/loop/0').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(RedirectError);
+    expect(err).toMatchObject({ kind: 'loop' });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch.mock.calls.every(([, init]) => init?.redirect === 'manual')).toBe(true);
+  });
+
+  it('rejects with a RedirectError when the chain is longer than MAX_REDIRECTS', async () => {
+    let n = 0;
+    mockFetch.mockImplementation(async () => response(301, '', { location: `/hop${++n}` }));
+
+    const err = await fetchPage('https://example.com/').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(RedirectError);
+    expect(err).toMatchObject({ kind: 'limit' });
+    expect(mockFetch).toHaveBeenCalledTimes(MAX_REDIRECTS);
+    expect(mockFetch.mock.calls.every(([, init]) => init?.redirect === 'manual')).toBe(true);
   });
 
   it('gives up on a body that never finishes', async () => {
@@ -269,6 +296,31 @@ describe('redirects into a private network', () => {
     expect(requestedUrls()).toEqual(['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png']);
   });
 
+  it('refuses a private start URL for fetchHead and fetchPage when the audited URL is public', async () => {
+    const opts = { auditedUrl: 'https://example.com/' };
+
+    await expect(fetchHead('http://169.254.169.254/x.png', opts)).rejects.toThrow(/private address 169\.254\.169\.254/);
+    await expect(fetchPage('http://10.0.0.1/sitemap.xml', opts)).rejects.toThrow(/private address 10\.0\.0\.1/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('judges redirect hops against the audited URL, not the start URL', async () => {
+    mockFetch.mockResolvedValueOnce(response(302, '', { location: 'http://127.0.0.1/admin' }));
+
+    // The start URL is public, but so is the audit: still refused.
+    await expect(
+      fetchHead('https://cdn.example.com/a.png', { auditedUrl: 'https://example.com/' }),
+    ).rejects.toThrow(/private address/);
+  });
+
+  it('lets a local audit fetch its own private URLs', async () => {
+    mockFetch.mockResolvedValueOnce(response(200));
+
+    await expect(fetchHead('http://127.0.0.1:3000/a.png', { auditedUrl: 'http://localhost:3000/' })).resolves.toMatchObject({
+      status: 200,
+    });
+  });
+
   it('follows a local server redirecting within the private network', async () => {
     mockFetch
       .mockResolvedValueOnce(response(302, '', { location: 'http://127.0.0.1:3000/home' }))
@@ -281,27 +333,41 @@ describe('redirects into a private network', () => {
 });
 
 describe('fetchPage body cap', () => {
-  it('stops reading at MAX_BODY_BYTES, marks the page truncated and closes the stream', async () => {
+  function endless() {
     const chunk = new Uint8Array(1024 * 1024).fill(0x61);
-    let cancelled = false;
-    let pulled = 0;
-    const endless = new ReadableStream<Uint8Array>({
+    const state = { cancelled: false, pulled: 0, chunk };
+    const stream = new ReadableStream<Uint8Array>({
       pull(controller) {
-        pulled++;
+        state.pulled++;
         controller.enqueue(chunk);
       },
       cancel() {
-        cancelled = true;
+        state.cancelled = true;
       },
     });
-    mockFetch.mockResolvedValueOnce(new Response(endless, { status: 200, headers: { 'content-type': 'text/html' } }));
+    return { stream, state };
+  }
+
+  it('stops reading at MAX_HTML_BYTES by default, marks the page truncated and closes the stream', async () => {
+    const { stream, state } = endless();
+    mockFetch.mockResolvedValueOnce(new Response(stream, { status: 200, headers: { 'content-type': 'text/html' } }));
 
     const page = await fetchPage('https://example.com/');
 
-    expect(page.body.length).toBe(MAX_BODY_BYTES);
+    expect(page.body.length).toBe(MAX_HTML_BYTES);
     expect(page.truncated).toBe(true);
-    expect(cancelled).toBe(true);
-    expect(pulled).toBeLessThanOrEqual(MAX_BODY_BYTES / chunk.length + 2);
+    expect(state.cancelled).toBe(true);
+    expect(state.pulled).toBeLessThanOrEqual(MAX_HTML_BYTES / state.chunk.length + 2);
+  });
+
+  it('reads up to the cap a caller asks for, such as MAX_SITEMAP_BYTES', async () => {
+    const { stream } = endless();
+    mockFetch.mockResolvedValueOnce(new Response(stream, { status: 200 }));
+
+    const page = await fetchPage('https://example.com/sitemap.xml', { maxBytes: MAX_SITEMAP_BYTES });
+
+    expect(page.body.length).toBe(MAX_SITEMAP_BYTES);
+    expect(page.truncated).toBe(true);
   });
 
   it('leaves a body under the cap alone', async () => {

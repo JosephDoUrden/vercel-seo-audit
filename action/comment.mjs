@@ -154,15 +154,18 @@ export async function run({ env, fetch, cwd, log }) {
     return 'skipped';
   }
 
-  // A crash leaves no report. Say so in the summary, and replace an earlier
-  // comment so it does not keep showing the last run's numbers.
-  if (env.AUDIT_EXIT_CODE === '2') {
+  // Exit 2 can still leave a report: an unreachable site is reported as one
+  // TARGET_UNREACHABLE finding. The audit step deletes report.md before the
+  // run, so one handed over now is this run's. A crash leaves none: say so in
+  // the summary, and replace an earlier comment so it does not keep showing
+  // the last run's numbers.
+  const handedOver = env.AUDIT_EXIT_CODE !== '2' || env.REPORT_PATH === REPORT_FILE;
+  const md = handedOver ? readReport(cwd, env.REPORT_PATH, log) : undefined;
+  if (md === undefined && env.AUDIT_EXIT_CODE === '2') {
     if (summary && env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, crashBody(key));
     if (!prComment) return 'summary';
     return comment(env, fetch, log, key, crashBody(key), { updateOnly: true });
   }
-
-  const md = readReport(cwd, env.REPORT_PATH, log);
   if (md === undefined) return 'skipped';
 
   if (summary && env.GITHUB_STEP_SUMMARY) {
