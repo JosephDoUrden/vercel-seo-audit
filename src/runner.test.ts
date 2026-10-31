@@ -23,6 +23,7 @@ vi.mock('./audit/index.js', () => ({
   auditVercel: vi.fn(),
   auditStreamedMetadata: vi.fn(),
   auditHostLeak: vi.fn(),
+  auditUaParity: vi.fn(),
 }));
 
 import { fetchPage, RedirectError } from './utils/http.js';
@@ -42,6 +43,7 @@ import {
   auditVercel,
   auditStreamedMetadata,
   auditHostLeak,
+  auditUaParity,
 } from './audit/index.js';
 
 const mockFetchPage = vi.mocked(fetchPage);
@@ -60,6 +62,7 @@ const mockPerformance = vi.mocked(auditPerformance);
 const mockVercel = vi.mocked(auditVercel);
 const mockStreamedMetadata = vi.mocked(auditStreamedMetadata);
 const mockHostLeak = vi.mocked(auditHostLeak);
+const mockUaParity = vi.mocked(auditUaParity);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -87,6 +90,7 @@ beforeEach(() => {
   mockVercel.mockResolvedValue([]);
   mockStreamedMetadata.mockResolvedValue([]);
   mockHostLeak.mockResolvedValue([]);
+  mockUaParity.mockResolvedValue([]);
 });
 
 describe('runAudit', () => {
@@ -107,7 +111,7 @@ describe('runAudit', () => {
     expect(mockRedirects).toHaveBeenCalledTimes(1);
   });
 
-  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security, performance, vercel, streamedMetadata, hostLeak)', async () => {
+  it('runs phase 2 modules (sitemap, metadata, favicon, nextjs, structuredData, i18n, images, security, performance, vercel, streamedMetadata, hostLeak, uaParity)', async () => {
     await runAudit('https://example.com');
 
     expect(mockSitemap).toHaveBeenCalledTimes(1);
@@ -122,6 +126,7 @@ describe('runAudit', () => {
     expect(mockVercel).toHaveBeenCalledTimes(1);
     expect(mockStreamedMetadata).toHaveBeenCalledTimes(1);
     expect(mockHostLeak).toHaveBeenCalledTimes(1);
+    expect(mockUaParity).toHaveBeenCalledTimes(1);
   });
 
   it('does not run crawl module when crawl option is not set', async () => {
@@ -706,6 +711,7 @@ describe('runAudit with only', () => {
     vercel: mockVercel,
     streamedMetadata: mockStreamedMetadata,
     hostLeak: mockHostLeak,
+    uaParity: mockUaParity,
     crawl: mockCrawl,
   });
 

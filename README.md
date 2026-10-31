@@ -12,7 +12,7 @@ A CLI that explains **why Google isn't indexing your Next.js site**, from what t
 * **Preview deployments left indexable.** A `*.vercel.app` URL served without `x-robots-tag: noindex` or a robots meta `noindex` (`VERCEL_PREVIEW_INDEXABLE`): an error on branch URLs, which are always previews, and a warning on other generated URLs, which may be production.
 * **Metadata streamed into `<body>`.** Next.js 15.2 and later stream dynamic `generateMetadata` output into `<body>` for every user agent not on their HTML-limited bot list, so a crawler that reads only `<head>` and does not run JavaScript sees no title, description or canonical. The page is fetched once more as a bot on that list to confirm (`METADATA_STREAMED_TO_BODY`, `METADATA_NOT_IN_HEAD`, `METADATA_IN_HEAD`).
 
-Beyond those, the audit covers redirect chains and loops, the trailing-slash 308, robots.txt (including rules that keep Googlebot from the page's scripts and stylesheets, `ROBOTS_BLOCKS_RENDER_ASSETS`), the sitemap, `noindex` headers, canonical mismatches, Open Graph, favicons, JSON-LD, hreflang, images, security headers, performance hints, Vercel CDN cache headers and Vercel or Cloudflare challenge pages on the page, robots.txt or the sitemap (`EDGE_CHALLENGE`), canonical, social card, hreflang and JSON-LD URLs that point at localhost or a `vercel.app` host (`URL_HOST_LOCALHOST`, `URL_HOST_VERCEL_APP`, `URL_HOST_MISMATCH`), with `--crawl` to run the page checks over every sitemap URL. The 15 modules are listed under [Running some modules only](#running-some-modules-only).
+Beyond those, the audit covers redirect chains and loops, the trailing-slash 308, robots.txt (including rules that keep Googlebot from the page's scripts and stylesheets, `ROBOTS_BLOCKS_RENDER_ASSETS`), the sitemap, `noindex` headers, canonical mismatches, Open Graph, favicons, JSON-LD, hreflang, images, security headers, performance hints, Vercel CDN cache headers and Vercel or Cloudflare challenge pages on the page, robots.txt or the sitemap (`EDGE_CHALLENGE`), canonical, social card, hreflang and JSON-LD URLs that point at localhost or a `vercel.app` host (`URL_HOST_LOCALHOST`, `URL_HOST_VERCEL_APP`, `URL_HOST_MISMATCH`), pages that answer Googlebot, an HTML-limited bot or another crawler differently from the default user agent (`UA_STATUS_DIFFERS`, `UA_METADATA_DIFFERS`, `UA_CACHE_DIFFERS`, `UA_SIZE_DIFFERS`), with `--crawl` to run the page checks over every sitemap URL. The 16 modules are listed under [Running some modules only](#running-some-modules-only).
 
 ---
 
@@ -227,6 +227,7 @@ Ignored findings do not count towards the summary or the exit code. The text rep
 | `vercel` | Vercel CDN cache headers and indexable preview URLs |
 | `streamedMetadata` | Metadata streamed into `<body>` by Next.js 15.2+ |
 | `hostLeak` | Canonical, social card, hreflang and JSON-LD URLs on localhost or a vercel.app host |
+| `uaParity` | What the page serves to Googlebot, an HTML-limited bot and another crawler, against the default user agent |
 | `crawl` | Sitemap URLs up to the `--crawl` limit (default 50); adds `robots` and `sitemap` |
 
 A module that reads another one's results brings it along: `--only sitemap` also runs `robots`, so the robots.txt cross-check still happens, and `--only crawl` runs `robots` and `sitemap` first. `--only` without `crawl` turns crawling off even if `--crawl` is set (a warning says so); naming `crawl` turns it on, with the `--crawl` limit or the default of 50. Ids match exactly, case included, and an unknown one stops the run with exit code `2`.
@@ -393,7 +394,8 @@ Progress is printed to stderr as each page is crawled.
   so crawlers that read only `<head>` and do not run JavaScript miss the title, description,
   canonical and Open Graph tags. When any of those is in `<body>` alone on a Next.js page, the
   page is fetched once more as `facebookexternalhit`, without the shared cache, to compare.
-  Together with the Vercel recheck below, that is at most two extra GETs of the page per audit.
+  Together with the Vercel recheck below, that is at most two extra GETs of the page per audit,
+  on top of the three the user-agent parity check makes.
   Skipped when `--user-agent` is already on Next's list (the `bingbot` preset is; `googlebot`
   is not, because Next.js streams to it too), and not run on `--crawl` pages
 * Metadata missing from `<head>` even for that bot (`METADATA_NOT_IN_HEAD`, warning): a narrower
@@ -434,6 +436,35 @@ Off Vercel (no `server: Vercel` and no `x-vercel-id`) the module reports that on
 * A `*.vercel.app` URL without `x-robots-tag: noindex` or a robots meta `noindex`. Branch
   URLs (`<project>-git-<branch>-<scope>.vercel.app`) are always previews and get an
   error; other generated URLs can be the production deployment itself and get a warning
+
+### User-agent parity
+
+The page is fetched three more times, without the shared cache, as Googlebot (the `googlebot`
+preset), as `facebookexternalhit` (the HTML-limited bot the streamed-metadata check uses) and
+as `vercel-seo-audit/<version> (+https://github.com/JosephDoUrden/vercel-seo-audit)`, or as
+Chrome when the default user agent is already the audit's own. Each answer is compared with
+the page already fetched. Skipped when that page was not a 2xx HTML response (unreachable,
+an error status or an edge challenge), and not run on `--crawl` pages.
+
+Next.js can answer the same URL differently by user agent: a user agent on a custom
+`htmlLimitedBots` list but not the built-in one gets no metadata under PPR and, on Vercel, a 500
+([vercel/next.js#95406](https://github.com/vercel/next.js/issues/95406)), and from 16.3 matched
+user agents get `private, no-store` ([#96594](https://github.com/vercel/next.js/issues/96594)).
+Google counts serving different content to users and to search engines as
+[cloaking](https://developers.google.com/search/docs/essentials/spam-policies#cloaking).
+
+These requests are not from verified crawlers. Vercel and Cloudflare check Googlebot by IP
+address, so a block seen here may not apply to Google, and the other way round.
+
+* A 4xx or 5xx for one of them (`UA_STATUS_DIFFERS`, error), naming a Vercel or Cloudflare
+  challenge when that is what came back
+* A title, canonical, robots meta or `X-Robots-Tag` that differs in presence or value
+  (`UA_METADATA_DIFFERS`, warning). Case, whitespace and a trailing slash on the canonical
+  are ignored
+* `private` or `no-store` in `cache-control` for some user agents only (`UA_CACHE_DIFFERS`,
+  info): expected on Next.js 16.3 for `htmlLimitedBots`
+* Two 2xx responses more than 30% apart in size (`UA_SIZE_DIFFERS`, info), with each size
+  against the default's to the nearest 10% and whether the page has an `<h1>`
 
 ---
 
