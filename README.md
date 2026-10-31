@@ -82,6 +82,22 @@ These are the issues that silently tank your rankings on Next.js/Vercel:
 
 ---
 
+## For coding agents
+
+[AGENTS.md](./AGENTS.md) is written for Claude Code, Cursor, Codex and the like. The short version:
+
+```bash
+# One line of JSON: findings sorted by severity, each with its fix text
+npx vercel-seo-audit https://your-site.com --format agent
+
+# What a code means, which module reports it and under which category
+npx vercel-seo-audit explain NOINDEX_DETECTED
+```
+
+`--format agent` is the stable contract for agents. `--json` is the full report dump and can change shape between releases.
+
+---
+
 ## Usage
 
 ```bash
@@ -90,6 +106,12 @@ vercel-seo-audit https://your-site.com
 
 # JSON output (pipe to jq, save to file, feed to CI)
 vercel-seo-audit https://your-site.com --json
+
+# Compact JSON for coding agents: no pass findings, no prose, --diff nested under "diff"
+vercel-seo-audit https://your-site.com --format agent
+
+# Explain an issue code (unknown codes exit 2 with the three closest)
+vercel-seo-audit explain VERCEL_PREVIEW_INDEXABLE
 
 # Verbose mode — raw HTTP details for each finding
 vercel-seo-audit https://your-site.com --verbose
@@ -160,11 +182,12 @@ Create a `.seoauditrc.json` in your project root to set defaults:
   "report": "json",
   "timeout": 15000,
   "ignore": ["ROBOTS_MISSING", "FAVICON_MISSING"],
-  "only": ["metadata", "vercel"]
+  "only": ["metadata", "vercel"],
+  "format": "text"
 }
 ```
 
-Then just run `vercel-seo-audit` with no arguments. CLI flags always override config values.
+Then just run `vercel-seo-audit` with no arguments. CLI flags always override config values; `format` is `text` or `agent`, and `--json` on the command line beats a `format` set here.
 
 ### Ignoring findings
 
