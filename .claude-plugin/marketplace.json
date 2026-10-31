@@ -1,0 +1,18 @@
+{
+  "name": "vercel-seo-audit",
+  "description": "Agent skill that runs vercel-seo-audit against a deployed site and fixes what it finds",
+  "owner": {
+    "name": "JosephDoUrden",
+    "url": "https://github.com/JosephDoUrden"
+  },
+  "plugins": [
+    {
+      "name": "vercel-seo-audit",
+      "source": "./skills/vercel-seo-audit",
+      "description": "Run the SEO and indexing audit on a deployed Next.js or Vercel site and fix the findings",
+      "license": "MIT",
+      "homepage": "https://github.com/JosephDoUrden/vercel-seo-audit",
+      "keywords": ["seo", "nextjs", "vercel", "search-console"]
+    }
+  ]
+}
