@@ -170,14 +170,14 @@ async function auditPage(
   let finalUrl: string;
   // Each crawled page is fetched once, so the audit cache would only pin every
   // body in memory until the audit ends.
-  const { timeout, userAgent, signal } = ctx.fetchOptions;
+  const { timeout, userAgent, signal, maxBytes } = ctx.fetchOptions;
   try {
-    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl, signal });
+    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl, signal, maxBytes });
     body = res.body;
     status = res.status;
     headers = res.headers;
     finalUrl = res.finalUrl;
-    if (res.truncated) findings.push(responseTooLarge(pageUrl, 'crawl', headers));
+    if (res.truncated) findings.push(responseTooLarge(pageUrl, 'crawl', headers, 'html', maxBytes));
   } catch {
     findings.push({
       code: 'CRAWL_PAGE_ERROR',

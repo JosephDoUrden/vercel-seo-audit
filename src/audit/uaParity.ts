@@ -1,8 +1,7 @@
-import * as cheerio from 'cheerio';
+import { Parser } from 'htmlparser2';
 import { USER_AGENT, USER_AGENT_PRESETS, VERSION } from '../constants.js';
 import type { AuditContext, AuditFinding } from '../types.js';
 import { detectChallenge } from '../utils/challenge.js';
-import { parseHtml } from '../utils/html-parser.js';
 import { fetchPage } from '../utils/http.js';
 import { BOT_PROBE_USER_AGENT } from './streamed-metadata.js';
 
@@ -73,15 +72,52 @@ interface View {
 
 const text = (v: string | undefined | null): string | null => v?.replace(/\s+/g, ' ').trim() || null;
 
-function read($: cheerio.CheerioAPI, body: string, header: (name: string) => string | undefined | null) {
+// The fields a view compares, read in one streaming pass that keeps no document: the first
+// <title>'s text, the href of the first <link rel="canonical">, the content of the first
+// <meta name="robots"> and whether there is an <h1>, as the cheerio selectors would pick them.
+// Every view goes through it, the audited page as well, so two views never differ because
+// two parsers did. A full parse per probe cost hundreds of megabytes on a 10 MiB page, and a
+// dynamic page differs on every request, so the audited page's parse could not be reused.
+function scan(body: string): { title: string | null; canonical: string | null; robots: string | null; h1: boolean } {
+  let title: string | undefined;
+  let titleOpen = false;
+  let canonical: string | undefined;
+  let robots: string | undefined;
+  let canonicalSeen = false;
+  let robotsSeen = false;
+  let h1 = false;
+  const parser = new Parser({
+    onopentag(name, attrs) {
+      if (name === 'title' && title === undefined) {
+        titleOpen = true;
+        title = '';
+      } else if (name === 'link' && !canonicalSeen && attrs.rel === 'canonical') {
+        canonicalSeen = true;
+        canonical = attrs.href;
+      } else if (name === 'meta' && !robotsSeen && attrs.name === 'robots') {
+        robotsSeen = true;
+        robots = attrs.content;
+      } else if (name === 'h1') {
+        h1 = true;
+      }
+    },
+    ontext(data) {
+      if (titleOpen) title += data;
+    },
+    onclosetag(name) {
+      if (name === 'title') titleOpen = false;
+    },
+  });
+  parser.end(body);
+  return { title: text(title), canonical: text(canonical), robots: text(robots), h1 };
+}
+
+function read(body: string, header: (name: string) => string | undefined | null) {
   return {
-    title: text($('title').first().text()),
-    canonical: text($('link[rel="canonical"]').first().attr('href')),
-    robots: text($('meta[name="robots"]').first().attr('content')),
+    ...scan(body),
     xRobotsTag: text(header('x-robots-tag')),
     cacheControl: text(header('cache-control')),
     bytes: Buffer.byteLength(body, 'utf-8'),
-    h1: $('h1').length > 0,
   };
 }
 
@@ -96,6 +132,7 @@ async function probe(url: string, userAgent: string, ctx: AuditContext): Promise
       userAgent,
       auditedUrl: ctx.fetchOptions.auditedUrl,
       signal: ctx.fetchOptions.signal,
+      maxBytes: ctx.fetchOptions.maxBytes,
     });
   } catch {
     return undefined;
@@ -108,9 +145,7 @@ async function probe(url: string, userAgent: string, ctx: AuditContext): Promise
     ok,
     finalUrl: page.finalUrl,
     ...(challenge && { challenge: challenge.provider }),
-    // cheerio.load rather than parseHtml, which remembers one page: the audited page other
-    // modules are reading.
-    ...read(cheerio.load(page.body), page.body, (name) => page.headers.get(name)),
+    ...read(page.body, (name) => page.headers.get(name)),
   };
 }
 
@@ -157,7 +192,7 @@ export async function auditUaParity(ctx: AuditContext): Promise<AuditFinding[]> 
   const base: View = {
     userAgent: defaultUserAgent,
     ok: true,
-    ...read(parseHtml(html), html, (name) => headers[name]),
+    ...read(html, (name) => headers[name]),
   };
 
   const agents = parityUserAgents(defaultUserAgent);

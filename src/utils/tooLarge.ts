@@ -1,20 +1,29 @@
 import { MAX_HTML_BYTES, MAX_SITEMAP_BYTES } from '../constants.js';
 import type { AuditFinding, IssueCategory } from '../types.js';
 
+const MIB = 1024 * 1024;
+
+// 10 MiB for the default cap, the exact count for one a caller set.
+function size(bytes: number): string {
+  return bytes % MIB === 0 ? `${bytes / MIB} MiB` : `${bytes.toLocaleString('en-GB')} bytes`;
+}
+
 /**
  * The finding for a body that fetchPage cut at its cap: MAX_SITEMAP_BYTES for a
- * sitemap, MAX_HTML_BYTES for anything else. `details.bytes` is the size the server
- * declared in `content-length`, or `null` when it sent none.
+ * sitemap, `htmlLimit` (MAX_HTML_BYTES unless the caller lowered it) for anything
+ * else. `details.bytes` is the size the server declared in `content-length`, or
+ * `null` when it sent none.
  */
 export function responseTooLarge(
   url: string,
   category: IssueCategory,
   headers: Headers,
   kind: 'html' | 'sitemap' = 'html',
+  htmlLimit: number = MAX_HTML_BYTES,
 ): AuditFinding {
   const declared = Number.parseInt(headers.get('content-length') ?? '', 10);
   const sitemap = kind === 'sitemap';
-  const limit = sitemap ? MAX_SITEMAP_BYTES : MAX_HTML_BYTES;
+  const limit = sitemap ? MAX_SITEMAP_BYTES : htmlLimit;
   return {
     code: 'RESPONSE_TOO_LARGE',
     severity: 'warning',
@@ -28,9 +37,8 @@ export function responseTooLarge(
         }
       : {
           // https://developers.google.com/search/docs/crawling-indexing/googlebot (updated 03 Feb 2026)
-          message: `Page is larger than 10 MiB and was cut there: ${url}`,
-          explanation:
-            'Googlebot reads only the first 2 MB of an HTML file and indexes what came before the cut-off. Only the first 10 MiB were read here, so the checks saw part of the page.',
+          message: `Page is larger than ${size(limit)} and was cut there: ${url}`,
+          explanation: `Googlebot reads only the first 2 MB of an HTML file and indexes what came before the cut-off. Only the first ${size(limit)} were read here, so the checks saw part of the page.`,
           suggestion: 'Make the HTML smaller: move inline data, styles and scripts out of the page, and paginate long lists.',
         }),
     details: { bytes: Number.isNaN(declared) ? null : declared, limit },

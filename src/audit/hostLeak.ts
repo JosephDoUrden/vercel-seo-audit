@@ -1,6 +1,5 @@
-import * as cheerio from 'cheerio';
 import type { AuditContext, AuditFinding, IssueCode, IssueSeverity } from '../types.js';
-import { getCanonicalUrl, getHreflangLinks } from '../utils/html-parser.js';
+import { getCanonicalUrl, getHreflangLinks, parseHtml } from '../utils/html-parser.js';
 
 // Vercel, "Avoiding duplicate content with vercel.app URLs" (updated 18 Sep 2026):
 // "Duplicate URLs don't automatically incur a search penalty", but they "can split signals
@@ -61,7 +60,7 @@ function collectJsonLd(value: unknown, out: Candidate[], key?: string): void {
 }
 
 function candidates(html: string): Candidate[] {
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const out: Candidate[] = [];
 
   const canonical = getCanonicalUrl(html);

@@ -124,7 +124,7 @@ const exitCode = getExitCode(report.summary, false);
 console.log(formatAgent(report, { version: VERSION, exitCode }));
 ```
 
-`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`, `skipPacks`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address, whether written as an address or as a name that resolves to one. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
+`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`, `skipPacks`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address, whether written as an address or as a name that resolves to one. Pass `maxHtmlBytes` to read less of each page than the default 10 MiB (sitemaps keep their 50 MB cap); memory grows with the page, so a service auditing pages it does not control may want it lower. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
 
 ```ts
 const controller = new AbortController();

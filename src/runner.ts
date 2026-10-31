@@ -240,6 +240,13 @@ export interface RunAuditOptions {
    */
   skipPacks?: readonly ModulePack[];
   /**
+   * Bytes of each HTML page, robots.txt and other non-sitemap response to read before
+   * cutting it, reported as RESPONSE_TOO_LARGE. MAX_HTML_BYTES (10 MiB) when unset;
+   * sitemaps keep their own 50 MB cap. Memory grows with the page, so a server that
+   * audits pages it does not control may want it lower.
+   */
+  maxHtmlBytes?: number;
+  /**
    * Cancels the audit. Every request in flight is aborted, no new one starts, and
    * `runAudit` rejects with an error named `AbortError` instead of returning a
    * partial report.
@@ -296,6 +303,10 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
   const { signal } = opts;
   const start = Date.now();
   const normalized = normalizeUrl(url);
+  const { maxHtmlBytes } = opts;
+  if (maxHtmlBytes !== undefined && !(Number.isSafeInteger(maxHtmlBytes) && maxHtmlBytes > 0)) {
+    throw new RangeError(`maxHtmlBytes must be a positive whole number of bytes, got ${maxHtmlBytes}`);
+  }
 
   const fetchOptions: FetchOptions = {
     timeout: opts.timeout,
@@ -303,6 +314,7 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
     cache: new Map(),
     auditedUrl: normalized,
     signal,
+    ...(maxHtmlBytes !== undefined && { maxBytes: maxHtmlBytes }),
   };
 
   const ctx: AuditContext = {
@@ -329,7 +341,7 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
     pageFacts.status = page.status;
     pageFacts.finalUrl = page.finalUrl;
     pageFacts.nextjs = isNextjsPage(Object.fromEntries(page.headers.entries()), page.body);
-    if (page.truncated) targetFindings.push(responseTooLarge(normalized, 'performance', page.headers));
+    if (page.truncated) targetFindings.push(responseTooLarge(normalized, 'performance', page.headers, 'html', maxHtmlBytes));
     if (page.status >= 200 && page.status < 300) {
       const contentType = page.headers.get('content-type');
       isHtml = isHtmlType(contentType) && page.body.trim() !== '';

@@ -25,7 +25,12 @@ type BotView =
 async function probe(url: string, ctx: AuditContext): Promise<BotView> {
   let page: Awaited<ReturnType<typeof fetchPage>>;
   try {
-    page = await fetchPage(url, { timeout: ctx.fetchOptions.timeout, userAgent: BOT_PROBE_USER_AGENT, signal: ctx.fetchOptions.signal });
+    page = await fetchPage(url, {
+      timeout: ctx.fetchOptions.timeout,
+      userAgent: BOT_PROBE_USER_AGENT,
+      signal: ctx.fetchOptions.signal,
+      maxBytes: ctx.fetchOptions.maxBytes,
+    });
   } catch {
     return { botRequest: 'failed', reason: 'error' };
   }

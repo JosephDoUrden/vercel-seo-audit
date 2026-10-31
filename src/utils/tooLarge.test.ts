@@ -27,4 +27,14 @@ describe('responseTooLarge', () => {
       limit: MAX_HTML_BYTES,
     });
   });
+
+  it('names the cap a caller set in place of the default', () => {
+    const mib = responseTooLarge('https://example.com/', 'performance', new Headers(), 'html', 2 * 1024 * 1024);
+    const odd = responseTooLarge('https://example.com/', 'performance', new Headers(), 'html', 500_000);
+
+    expect(mib.details).toEqual({ bytes: null, limit: 2 * 1024 * 1024 });
+    expect(mib.message).toContain('larger than 2 MiB');
+    expect(odd.message).toContain('larger than 500,000 bytes');
+    expect(odd.explanation).toContain('first 500,000 bytes were read');
+  });
 });
