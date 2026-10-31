@@ -110,6 +110,20 @@ In Claude Code you can install it as a plugin instead:
 /plugin install vercel-seo-audit --marketplace JosephDoUrden/vercel-seo-audit
 ```
 
+### Use as a library
+
+The package also exports the audit itself, for tools such as an MCP server that would rather not spawn the CLI:
+
+```ts
+import { runAudit, formatAgent, getExitCode, VERSION } from 'vercel-seo-audit';
+
+const report = await runAudit('https://your-site.com', { only: ['robots', 'sitemap', 'metadata'] });
+const exitCode = getExitCode(report.summary, false);
+console.log(formatAgent(report, { version: VERSION, exitCode }));
+```
+
+`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`) and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address. `diffReports`, `describeCode`, `ISSUE_CODES`, `MODULE_IDS` and the report types are exported too. The package is ESM only.
+
 ---
 
 ## Usage

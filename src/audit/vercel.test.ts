@@ -376,16 +376,20 @@ describe('auditVercel', () => {
       expect(mockFetchPage).not.toHaveBeenCalled();
     });
 
-    it('asks once more for the final url with the audit options and without the shared cache', async () => {
+    it('asks once more for the final url with the audit options, the audited url and without the shared cache', async () => {
       secondRequest({ ...VERCEL_HIT });
       const ctx = makeCtx({
         headers: MISS,
         finalUrl: 'https://www.example.com/en',
-        fetchOptions: { timeout: 5000, userAgent: 'Googlebot', cache: new Map() },
+        fetchOptions: { timeout: 5000, userAgent: 'Googlebot', cache: new Map(), auditedUrl: 'https://example.com/' },
       });
       await auditVercel(ctx);
       expect(mockFetchPage).toHaveBeenCalledTimes(1);
-      expect(mockFetchPage).toHaveBeenCalledWith('https://www.example.com/en', { timeout: 5000, userAgent: 'Googlebot' });
+      expect(mockFetchPage).toHaveBeenCalledWith('https://www.example.com/en', {
+        timeout: 5000,
+        userAgent: 'Googlebot',
+        auditedUrl: 'https://example.com/',
+      });
       expect(mockFetchPage.mock.calls[0][1]).not.toHaveProperty('cache');
     });
 
