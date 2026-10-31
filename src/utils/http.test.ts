@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { FetchCache } from '../types.js';
-import { fetchPage, fetchHead, fetchWithoutRedirect, followRedirectChain } from './http.js';
+import { MAX_HTML_BYTES, MAX_REDIRECTS, MAX_SITEMAP_BYTES } from '../constants.js';
+import { fetchPage, fetchHead, fetchWithoutRedirect, followRedirectChain, RedirectError } from './http.js';
 
 const mockFetch = vi.fn<typeof fetch>();
 
@@ -61,7 +62,7 @@ describe('fetchPage', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it('falls back to a follow GET when something else consumed the cached response', async () => {
+  it('falls back to a fresh manual GET when something else consumed the cached response', async () => {
     const cache: FetchCache = new Map();
     mockFetch
       .mockResolvedValueOnce(response(200, '<html>first</html>'))
@@ -73,7 +74,34 @@ describe('fetchPage', () => {
 
     expect(page.body).toBe('<html>again</html>');
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(mockFetch.mock.calls[1][1]).toMatchObject({ redirect: 'follow' });
+    // Never 'follow': native redirects would skip the private-address check.
+    expect(mockFetch.mock.calls[1][1]).toMatchObject({ redirect: 'manual' });
+  });
+
+  it('rejects with a RedirectError on a loop, without handing the URL to native redirects', async () => {
+    mockFetch.mockImplementation(async (input) => {
+      const n = Number(String(input).split('/').pop());
+      return response(302, '', { location: `/loop/${(n + 1) % 3}` });
+    });
+
+    const err = await fetchPage('https://example.com/loop/0').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(RedirectError);
+    expect(err).toMatchObject({ kind: 'loop' });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch.mock.calls.every(([, init]) => init?.redirect === 'manual')).toBe(true);
+  });
+
+  it('rejects with a RedirectError when the chain is longer than MAX_REDIRECTS', async () => {
+    let n = 0;
+    mockFetch.mockImplementation(async () => response(301, '', { location: `/hop${++n}` }));
+
+    const err = await fetchPage('https://example.com/').catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(RedirectError);
+    expect(err).toMatchObject({ kind: 'limit' });
+    expect(mockFetch).toHaveBeenCalledTimes(MAX_REDIRECTS);
+    expect(mockFetch.mock.calls.every(([, init]) => init?.redirect === 'manual')).toBe(true);
   });
 
   it('gives up on a body that never finishes', async () => {
@@ -142,42 +170,213 @@ describe('fetchPage when the first hop is slow to answer', () => {
     vi.unstubAllGlobals();
   });
 
-  it('reports a body timeout from the fallback GET, not a bare abort', async () => {
+  it('reports a timeout, not a bare abort, and does not retry once the deadline has passed', async () => {
     let requests = 0;
-    let markClosed: () => void;
-    const stalledClosed = new Promise<void>((resolve) => {
-      markClosed = resolve;
-    });
-    const server = createServer((req, res) => {
+    const server = createServer((_req, res) => {
       requests++;
-      if (requests === 1) {
-        // Headers arrive after the 100ms deadline, so the redirect walk gives
-        // up and fetchPage falls back to a plain GET (the cold-start path).
-        setTimeout(() => res.writeHead(200).end('late'), 400);
-        return;
-      }
-      req.socket.once('close', () => markClosed());
-      res.writeHead(200, { 'content-type': 'text/html', 'content-length': 1000 });
-      res.write('<html>');
+      // Headers arrive after the 100ms deadline.
+      setTimeout(() => res.writeHead(200).end('late'), 400);
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address() as AddressInfo;
 
     try {
+      const started = Date.now();
       await expect(
         fetchPage(`http://127.0.0.1:${port}/slow`, { timeout: 100 }),
-      ).rejects.toThrow(/Timed out reading body/);
-
-      await Promise.race([
-        stalledClosed,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('fallback socket still open 500ms after the timeout')), 500),
-        ),
-      ]);
+      ).rejects.toThrow(/Timed out after 100 ms/);
+      expect(Date.now() - started).toBeLessThan(350);
+      expect(requests).toBe(1);
     } finally {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
+  });
+});
+
+// A fetch stand-in that answers after `delay` ms and rejects with the abort
+// reason when its signal fires first, as undici does.
+function delayed(delay: number, make: (url: string) => Response) {
+  return (input: string | URL | Request, init?: RequestInit) =>
+    new Promise<Response>((resolve, reject) => {
+      const timer = setTimeout(() => resolve(make(String(input))), delay);
+      init?.signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(init.signal?.reason);
+      });
+    });
+}
+
+describe('fetchPage deadline', () => {
+  it('spends one --timeout on the whole redirect chain, not one per hop', async () => {
+    let hop = 0;
+    mockFetch.mockImplementation(delayed(60, () => response(302, '', { location: `/hop${++hop}` })));
+
+    const started = Date.now();
+    await expect(fetchPage('https://example.com/', { timeout: 150 })).rejects.toThrow(
+      /Timed out after 150 ms/,
+    );
+
+    expect(Date.now() - started).toBeLessThan(300);
+    // 60 ms a hop against 150 ms in all: the third hop is cut off.
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives the body only what is left of the deadline', async () => {
+    const stalled = new Response(new ReadableStream({ start() {} }), { status: 200 });
+    mockFetch.mockImplementation(delayed(80, () => stalled));
+
+    const started = Date.now();
+    await expect(fetchPage('https://example.com/', { timeout: 120 })).rejects.toThrow(/Timed out reading body/);
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+
+  it('does not fall back to a second GET when the first hop fails', async () => {
+    mockFetch.mockRejectedValue(new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND x.invalid') }));
+
+    await expect(fetchPage('https://x.invalid/')).rejects.toThrow('fetch failed');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps hop failures out of followRedirectChain, which reports what it walked', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(301, '', { location: '/next' }))
+      .mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    const chain = await followRedirectChain('https://example.com/');
+
+    expect(chain.hops).toHaveLength(1);
+    expect(chain.finalUrl).toBe('https://example.com/next');
+  });
+
+  it('names the timeout on a HEAD that does not answer', async () => {
+    mockFetch.mockImplementation(delayed(200, () => response(200)));
+
+    await expect(fetchHead('https://example.com/a.png', { timeout: 30 })).rejects.toThrow(
+      /Timed out after 30 ms/,
+    );
+  });
+});
+
+describe('redirects into a private network', () => {
+  it('refuses a public site redirecting to the metadata address, without requesting it', async () => {
+    mockFetch.mockResolvedValueOnce(response(302, '', { location: 'http://169.254.169.254/latest/meta-data/' }));
+
+    await expect(fetchPage('https://example.com/')).rejects.toThrow(/private address 169\.254\.169\.254/);
+    expect(requestedUrls()).toEqual(['https://example.com/']);
+  });
+
+  it('records the refused hop in followRedirectChain', async () => {
+    mockFetch.mockResolvedValueOnce(response(301, '', { location: 'http://10.0.0.5/' }));
+
+    const chain = await followRedirectChain('https://example.com/');
+
+    expect(chain.hops).toEqual([{ url: 'https://example.com/', status: 301, location: 'http://10.0.0.5/' }]);
+    expect(chain.finalUrl).toBe('http://10.0.0.5/');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('walks HEAD redirects itself and refuses one into a private network', async () => {
+    mockFetch.mockResolvedValueOnce(response(302, '', { location: 'http://[::1]/admin' }));
+
+    await expect(fetchHead('https://cdn.example.com/a.png')).rejects.toThrow(/private address \[::1\]/);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch.mock.calls[0][1]).toMatchObject({ method: 'HEAD', redirect: 'manual' });
+  });
+
+  it('follows public HEAD redirects to the final status', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(301, '', { location: '/b.png' }))
+      .mockResolvedValueOnce(response(200, '', { 'content-length': '42' }));
+
+    const head = await fetchHead('https://cdn.example.com/a.png');
+
+    expect(head.status).toBe(200);
+    expect(head.headers.get('content-length')).toBe('42');
+    expect(requestedUrls()).toEqual(['https://cdn.example.com/a.png', 'https://cdn.example.com/b.png']);
+  });
+
+  it('refuses a private start URL for fetchHead and fetchPage when the audited URL is public', async () => {
+    const opts = { auditedUrl: 'https://example.com/' };
+
+    await expect(fetchHead('http://169.254.169.254/x.png', opts)).rejects.toThrow(/private address 169\.254\.169\.254/);
+    await expect(fetchPage('http://10.0.0.1/sitemap.xml', opts)).rejects.toThrow(/private address 10\.0\.0\.1/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('judges redirect hops against the audited URL, not the start URL', async () => {
+    mockFetch.mockResolvedValueOnce(response(302, '', { location: 'http://127.0.0.1/admin' }));
+
+    // The start URL is public, but so is the audit: still refused.
+    await expect(
+      fetchHead('https://cdn.example.com/a.png', { auditedUrl: 'https://example.com/' }),
+    ).rejects.toThrow(/private address/);
+  });
+
+  it('lets a local audit fetch its own private URLs', async () => {
+    mockFetch.mockResolvedValueOnce(response(200));
+
+    await expect(fetchHead('http://127.0.0.1:3000/a.png', { auditedUrl: 'http://localhost:3000/' })).resolves.toMatchObject({
+      status: 200,
+    });
+  });
+
+  it('follows a local server redirecting within the private network', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response(302, '', { location: 'http://127.0.0.1:3000/home' }))
+      .mockResolvedValueOnce(response(200, '<html>home</html>'));
+
+    const page = await fetchPage('http://localhost:3000/');
+
+    expect(page.body).toBe('<html>home</html>');
+  });
+});
+
+describe('fetchPage body cap', () => {
+  function endless() {
+    const chunk = new Uint8Array(1024 * 1024).fill(0x61);
+    const state = { cancelled: false, pulled: 0, chunk };
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        state.pulled++;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    });
+    return { stream, state };
+  }
+
+  it('stops reading at MAX_HTML_BYTES by default, marks the page truncated and closes the stream', async () => {
+    const { stream, state } = endless();
+    mockFetch.mockResolvedValueOnce(new Response(stream, { status: 200, headers: { 'content-type': 'text/html' } }));
+
+    const page = await fetchPage('https://example.com/');
+
+    expect(page.body.length).toBe(MAX_HTML_BYTES);
+    expect(page.truncated).toBe(true);
+    expect(state.cancelled).toBe(true);
+    expect(state.pulled).toBeLessThanOrEqual(MAX_HTML_BYTES / state.chunk.length + 2);
+  });
+
+  it('reads up to the cap a caller asks for, such as MAX_SITEMAP_BYTES', async () => {
+    const { stream } = endless();
+    mockFetch.mockResolvedValueOnce(new Response(stream, { status: 200 }));
+
+    const page = await fetchPage('https://example.com/sitemap.xml', { maxBytes: MAX_SITEMAP_BYTES });
+
+    expect(page.body.length).toBe(MAX_SITEMAP_BYTES);
+    expect(page.truncated).toBe(true);
+  });
+
+  it('leaves a body under the cap alone', async () => {
+    mockFetch.mockResolvedValueOnce(response(200, 'small'));
+
+    const page = await fetchPage('https://example.com/');
+
+    expect(page.body).toBe('small');
+    expect(page.truncated).toBeUndefined();
   });
 });
 

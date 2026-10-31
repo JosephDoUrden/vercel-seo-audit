@@ -215,4 +215,17 @@ describe('auditImages', () => {
     const finding = findings.find((f) => f.code === 'IMG_LARGE_FILE');
     expect(finding).toBeUndefined();
   });
+
+  it('does not send HEAD requests to images on a private address', async () => {
+    mockFetchHead.mockResolvedValue({ status: 200, headers: new Headers({ 'content-length': '10' }) });
+    const ctx = makeCtx(
+      page(
+        '<img src="http://127.0.0.1/a.png" alt="a" width="1" height="1"><img src="https://cdn.example.com/b.png" alt="b" width="1" height="1">',
+      ),
+    );
+
+    await auditImages(ctx);
+
+    expect(mockFetchHead.mock.calls.map(([u]) => u)).toEqual(['https://cdn.example.com/b.png']);
+  });
 });

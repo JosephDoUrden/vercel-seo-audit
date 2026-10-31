@@ -19,7 +19,7 @@ export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]>
   const findings: AuditFinding[] = [];
   const { normalizedUrl, fetchOptions } = ctx;
 
-  // 1. Homepage redirect chain
+  // 1. Redirect chain of the audited page
   const chain = await followRedirectChain(normalizedUrl, fetchOptions);
 
   if (chain.isCircular) {
@@ -27,7 +27,7 @@ export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]>
       code: 'REDIRECT_LOOP',
       severity: 'error',
       category: 'redirect',
-      message: 'Redirect loop detected on homepage',
+      message: 'Redirect loop detected on the audited page',
       explanation:
         'A redirect loop prevents search engines and users from reaching your page, causing crawl failures.',
       suggestion: 'Check your server configuration and middleware for circular redirects.',
@@ -119,7 +119,7 @@ export async function auditRedirects(ctx: AuditContext): Promise<AuditFinding[]>
         code: 'META_REFRESH_REDIRECT',
         severity: 'warning',
         category: 'redirect',
-        message: 'Meta refresh redirect detected on homepage',
+        message: 'Meta refresh redirect detected on the audited page',
         explanation:
           'Meta refresh redirects are slower than server-side redirects and may confuse search engines.',
         suggestion:

@@ -1,4 +1,4 @@
-import * as cheerio from 'cheerio';
+import { parseHtml } from '../utils/html-parser.js';
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchPage } from '../utils/http.js';
 
@@ -33,7 +33,7 @@ export async function auditStructuredData(ctx: AuditContext): Promise<AuditFindi
     }
   }
 
-  const $ = cheerio.load(html);
+  const $ = parseHtml(html);
   const scripts = $('script[type="application/ld+json"]');
 
   if (scripts.length === 0) {

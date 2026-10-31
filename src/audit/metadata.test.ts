@@ -326,4 +326,21 @@ describe('auditMetadata', () => {
     expect(mockFetchPage).not.toHaveBeenCalled();
     expect(mismatch).toBeUndefined();
   });
+
+  it('does not probe og:image or twitter:image URLs on a private address', async () => {
+    mockFetchPage.mockResolvedValue(
+      makePage(
+        FULL_HTML.replace('https://example.com/image.png', 'http://169.254.169.254/latest/meta-data/').replace(
+          'https://example.com/twitter.png',
+          'http://10.0.0.1/t.png',
+        ),
+      ),
+    );
+
+    const findings = await auditMetadata(makeCtx());
+
+    expect(mockFetchHead).not.toHaveBeenCalled();
+    expect(findings.map((f) => f.code)).not.toContain('OG_IMAGE_BROKEN');
+    expect(findings.map((f) => f.code)).not.toContain('TWITTER_IMAGE_BROKEN');
+  });
 });

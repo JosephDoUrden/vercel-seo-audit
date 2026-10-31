@@ -456,11 +456,24 @@ describe('action/comment.mjs', () => {
       expect(writes(seen)).toHaveLength(0);
     });
 
-    it('does not post a stale report.md left in the directory', async () => {
-      const { fetch, seen } = mockFetch({ ...userForbidden, [COMMENTS_7]: { body: [] } });
-      await go(crashed({ REPORT_PATH: 'report.md' }), fetch);
-      expect(writes(seen)).toHaveLength(0);
-      expect(summary()).not.toContain('2 errors');
+    // The audit step deletes report.md before the run, so one handed over on
+    // exit 2 was written by this run: a TARGET_UNREACHABLE report, say.
+    it('posts the report the audit wrote even on exit 2', async () => {
+      const { fetch, seen } = mockFetch({
+        ...userForbidden,
+        [COMMENTS_7]: { body: [] },
+        [POST_7]: { status: 201 },
+      });
+      expect(await go(crashed({ REPORT_PATH: 'report.md' }), fetch)).toBe('posted');
+      expect(summary()).toContain('vercel-seo-audit: 2 errors');
+      expect(summary()).not.toMatch(/failed to run/);
+      expect(sent(writes(seen)[0])).toContain('2 errors');
+    });
+
+    it('falls back to the failed-to-run note when the handed-over report cannot be read', async () => {
+      rmSync(join(work, 'report.md'));
+      const { fetch } = mockFetch({});
+      await go(env({ AUDIT_EXIT_CODE: '2', REPORT_PATH: 'report.md' }), fetch);
       expect(summary()).toMatch(/failed to run/);
     });
 

@@ -94,7 +94,7 @@ vercel-seo-audit https://your-site.com --json
 # Verbose mode — raw HTTP details for each finding
 vercel-seo-audit https://your-site.com --verbose
 
-# Custom timeout (default: 10s)
+# Custom timeout per request (default: 10s), covering every redirect hop and the body
 vercel-seo-audit https://your-site.com --timeout 15000
 
 # Check specific pages for redirect issues
@@ -213,9 +213,28 @@ A limited run says so: the text, Markdown and HTML reports print a `Modules:` li
 
 ## What it checks
 
+### The audited page
+
+The page is fetched once before any module runs.
+
+* Not reachable at all (DNS, TLS, refused connection, timeout): one `TARGET_UNREACHABLE` error
+  with the underlying message in `details.error`. No module runs, and the CLI exits with `2`.
+  A redirect loop, or more than 20 redirects, is not that: the modules run and `redirects`
+  reports it
+* A 4xx or 5xx status: `TARGET_HTTP_ERROR` (error, `details.status`). The modules still run.
+  An edge challenge page is reported as `EDGE_CHALLENGE` instead
+* A 2xx response that is not HTML (`content-type` other than `text/html` or
+  `application/xhtml+xml`) or has an empty body: `TARGET_NOT_HTML` (warning). The modules that
+  read HTML are skipped; `robots`, `redirects`, `sitemap`, `nextjs`, `security`, `vercel` and
+  `crawl` still run. A response without a `content-type` is read as HTML
+* Bodies are cut at 10 MiB, sitemaps at 50 MB (Google's sitemap limit). Googlebot itself reads
+  only the first 2 MB of an HTML file. The audited page, a sitemap or a crawled page cut that
+  way gets `RESPONSE_TOO_LARGE` (warning, `details.bytes` from `content-length`), and the
+  checks read the part that came in
+
 ### Redirects
 
-* Redirect chains & loops (homepage + common pages)
+* Redirect chains & loops (audited page + common pages)
 * HTTP → HTTPS redirect
 * Trailing slash: whether the other form of the URL redirects, and with which status (Next.js uses a 308)
 * Meta refresh redirects (`<meta http-equiv="refresh">`)
@@ -235,6 +254,17 @@ A limited run says so: the text, Markdown and HTML reports print a `Modules:` li
 * Empty sitemap / broken URLs (samples up to 10)
 * Sitemap index support
 * Cross-check with robots.txt `Sitemap:` directive
+* URLs and child sitemaps on another host (`SITEMAP_CROSS_HOST_URLS`, warning, with the count
+  and up to five examples). They are never fetched, sampled or crawled. `http` and `https` on
+  the same host count as the same host, and so does the host the page or the sitemap
+  redirected to
+
+Wherever the audit follows a URL it did not get from you (redirect hops, child sitemaps,
+crawled pages, `og:image` / `twitter:image` / `<img>` probes, hreflang alternates), it refuses
+literal loopback, private, link-local and cloud-metadata addresses such as `169.254.169.254`,
+unless the audited URL is itself on one (auditing `http://localhost:3000` still works). Only
+literal addresses are checked: no DNS lookup is made, so a public name that resolves to a
+private address is not caught.
 
 ### Metadata
 
@@ -371,11 +401,14 @@ Findings are categorised by severity:
 
 Exit codes:
 
-| Code | Meaning                                    |
-| ---- | ------------------------------------------ |
-| `0`  | No errors found (warnings/info don't fail) |
-| `1`  | One or more errors found                   |
-| `2`  | Crash / invalid input                      |
+| Code | Meaning                                                              |
+| ---- | -------------------------------------------------------------------- |
+| `0`  | No errors found (warnings/info don't fail)                           |
+| `1`  | One or more errors found                                             |
+| `2`  | Crash, invalid input, or the audited page could not be fetched at all |
+
+On a `TARGET_UNREACHABLE` run the report is still printed (and `--json` is still valid JSON),
+with that one finding; the exit code is `2` even when the code is ignored, since nothing was audited.
 
 ---
 
@@ -430,7 +463,7 @@ The summary and the comment are built from `report.md`. When `report` is unset a
 
 The comment is one collapsible block whose first line is a hidden `<!-- vercel-seo-audit:default -->` marker. A rerun edits its own earlier comment instead of adding another: one that starts with the marker and was written by the same account (`github-actions[bot]` for the default token, or the owner of a personal access token). Comments by anyone else are never touched. If several workflows or matrix jobs comment on the same pull request, give each its own `comment-key` so they do not overwrite each other.
 
-The job summary has the full report (up to GitHub's 1 MiB limit). The comment is cut at 60,000 characters, with a note saying the full report is in the job summary. The comment step runs after a failing audit too, and a failure there never changes the audit's exit code. If the audit crashes (exit code `2`), an earlier comment is replaced with a note that the audit failed to run, so it does not keep showing the last run's numbers.
+The job summary has the full report (up to GitHub's 1 MiB limit). The comment is cut at 60,000 characters, with a note saying the full report is in the job summary. The comment step runs after a failing audit too, and a failure there never changes the audit's exit code. If the audit crashes or cannot reach the site (exit code `2`), an earlier comment is replaced with a note that the audit failed to run, so it does not keep showing the last run's numbers.
 
 ```yaml
 name: SEO Audit

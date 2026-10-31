@@ -1,6 +1,7 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchHead, fetchPage } from '../utils/http.js';
 import { getImages } from '../utils/html-parser.js';
+import { reachesPrivateAddress } from '../utils/url.js';
 
 const LARGE_FILE_THRESHOLD = 200 * 1024; // 200KB
 const MAX_HEAD_REQUESTS = 5;
@@ -98,6 +99,7 @@ export async function auditImages(ctx: AuditContext): Promise<AuditFinding[]> {
   // 5. Large file sizes (HEAD requests, max 5)
   const absoluteImages = images
     .filter((img) => img.src.startsWith('http://') || img.src.startsWith('https://'))
+    .filter((img) => !reachesPrivateAddress(img.src, ctx.normalizedUrl))
     .slice(0, MAX_HEAD_REQUESTS);
 
   const largeFiles: { src: string; size: number }[] = [];

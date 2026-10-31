@@ -1,7 +1,8 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { DEFAULT_PATHS, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
 import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
-import * as cheerio from 'cheerio';
+import type * as cheerio from 'cheerio';
+import { parseHtml } from '../utils/html-parser.js';
 import { fetchPage } from '../utils/http.js';
 import { matchRobots, selectRobotsGroup, type RobotsGroup } from '../utils/robots-match.js';
 import { getOrigin } from '../utils/url.js';
@@ -251,7 +252,7 @@ function checkRenderAssets(
   // A blocked page is not rendered at all; ROBOTS_BLOCKS_ALL and ROBOTS_BLOCKS_GOOGLEBOT cover that.
   if (page.origin === origin && !matchRobots(page.pathname + page.search, group).allowed) return [];
 
-  const $ = cheerio.load(ctx.html);
+  const $ = parseHtml(ctx.html);
   const findings: AuditFinding[] = [];
 
   const render = blockedBy(

@@ -396,4 +396,16 @@ describe('auditI18n', () => {
     const invalid = findings.find((f) => f.code === 'HREFLANG_INVALID_LANG');
     expect(invalid).toBeUndefined();
   });
+
+  it('does not fetch alternates on a private address for the reciprocal check', async () => {
+    const html = hreflangHtml([
+      { hreflang: 'en', href: 'https://example.com/' },
+      { hreflang: 'de', href: 'http://192.168.0.10/de' },
+      { hreflang: 'x-default', href: 'https://example.com/' },
+    ]);
+
+    await auditI18n(makeCtx(html));
+
+    expect(mockFetchPage).not.toHaveBeenCalled();
+  });
 });

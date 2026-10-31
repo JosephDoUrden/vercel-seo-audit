@@ -60,8 +60,30 @@ describe('auditCrawl fetch options', () => {
     expect(mockFetchPage).toHaveBeenCalledWith('https://example.com/page-1', {
       timeout: 1234,
       userAgent: 'bot',
+      auditedUrl: 'https://example.com/',
     });
     expect(ctx.fetchOptions.cache?.size).toBe(0);
+  });
+
+  it('skips sitemap URLs on a private address when the audited site is public', async () => {
+    const ctx = makeCtx({ sitemapUrls: ['http://169.254.169.254/latest/', 'https://example.com/page-1'] });
+
+    const findings = await auditCrawl(ctx);
+
+    expect(mockFetchPage.mock.calls.map(([u]) => u)).toEqual(['https://example.com/page-1']);
+    expect(findings).toEqual([]);
+  });
+
+  it('reports RESPONSE_TOO_LARGE for a page cut at the body cap, and still audits what was read', async () => {
+    mockFetchPage.mockResolvedValue({
+      ...makePage(GOOD_HTML, { finalUrl: 'https://example.com/page-1' }),
+      truncated: true,
+    });
+
+    const findings = await auditCrawl(makeCtx({ sitemapUrls: ['https://example.com/page-1'] }));
+
+    expect(findings.map((f) => f.code)).toEqual(['RESPONSE_TOO_LARGE']);
+    expect(findings[0]).toMatchObject({ category: 'crawl', url: 'https://example.com/page-1' });
   });
 });
 

@@ -1,5 +1,12 @@
 export const DEFAULT_TIMEOUT = 10_000;
 export const MAX_REDIRECTS = 20;
+// Bodies are read up to these many bytes and the rest is dropped, so a huge or endless
+// response cannot exhaust memory. Pages (and anything else) stop at 10 MiB, five times
+// the 2 MB Googlebot reads of an HTML file; the page is parsed by a dozen modules, so a
+// bigger cap costs gigabytes. Sitemaps stop at Google's limit for an uncompressed
+// sitemap, 50 MB (50,000,000 bytes).
+export const MAX_HTML_BYTES = 10 * 1024 * 1024;
+export const MAX_SITEMAP_BYTES = 50_000_000;
 export const USER_AGENT = 'vercel-seo-audit/2.10.0'; // x-release-please-version
 export const SITEMAP_SAMPLE_SIZE = 10;
 

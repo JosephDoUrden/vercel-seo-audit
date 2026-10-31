@@ -1,9 +1,30 @@
 import type { AuditContext, AuditFinding } from '../types.js';
-import { DEFAULT_PATHS, SITEMAP_SAMPLE_SIZE } from '../constants.js';
+import { DEFAULT_PATHS, MAX_SITEMAP_BYTES, SITEMAP_SAMPLE_SIZE } from '../constants.js';
 import { fetchPage, fetchHead, followRedirectChain } from '../utils/http.js';
 import { parseSitemapXml } from '../utils/xml-parser.js';
 import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
-import { getOrigin } from '../utils/url.js';
+import { getOrigin, isSameHost, reachesPrivateAddress } from '../utils/url.js';
+import { responseTooLarge } from '../utils/tooLarge.js';
+
+const CROSS_HOST_EXAMPLES = 5;
+
+function crossHostFinding(offHost: string[], sitemapUrl: string): AuditFinding[] {
+  if (offHost.length === 0) return [];
+  return [
+    {
+      code: 'SITEMAP_CROSS_HOST_URLS',
+      severity: 'warning',
+      category: 'sitemap',
+      message: `${offHost.length} sitemap URL(s) are on another host and were not checked`,
+      explanation:
+        'Google only accepts sitemap URLs on the host the sitemap is served from, unless the robots.txt of the other host points to this sitemap. URLs on other hosts are likely ignored.',
+      suggestion:
+        'List only URLs on this host, or add a Sitemap: line for this sitemap to the robots.txt of the other host.',
+      details: { count: offHost.length, examples: offHost.slice(0, CROSS_HOST_EXAMPLES) },
+      url: sitemapUrl,
+    },
+  ];
+}
 
 export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
@@ -27,10 +48,26 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
     });
   }
 
+  // URLs on another host are counted, reported once and never requested. That
+  // also keeps a public sitemap from pointing the audit at a private address.
+  // The hosts the page and the sitemap redirected to count as this site's own.
+  // A redirect the walk refused to follow ends on a private address; that is
+  // not this site's host.
+  const ownHosts = [sitemapUrl, ctx.finalUrl ?? sitemapUrl];
+  if (!reachesPrivateAddress(chain.finalUrl, sitemapUrl)) ownHosts.push(chain.finalUrl);
+  const sitemapFetch = { ...ctx.fetchOptions, maxBytes: MAX_SITEMAP_BYTES };
+  const offHost: string[] = [];
+  const onHost = (url: string): boolean => {
+    // An unparsable URL is left to fail on its own, as before.
+    if (!URL.canParse(url) || ownHosts.some((own) => isSameHost(url, own))) return true;
+    offHost.push(url);
+    return false;
+  };
+
   // 2. Fetch and parse the sitemap
   let sitemapBody: string;
   try {
-    const res = await fetchPage(sitemapUrl, ctx.fetchOptions);
+    const res = await fetchPage(sitemapUrl, sitemapFetch);
     if (res.status !== 200) {
       const challenge = detectChallenge(res.headers, res.status);
       if (challenge) {
@@ -50,6 +87,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
       });
       return findings;
     }
+    if (res.truncated) findings.push(responseTooLarge(sitemapUrl, 'sitemap', res.headers, 'sitemap'));
     sitemapBody = res.body;
   } catch {
     findings.push({
@@ -85,13 +123,14 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
   if (parsed.type === 'sitemapindex') {
     // Resolve child sitemaps and collect all URLs for crawl mode
     const allUrls: string[] = [];
-    for (const childUrl of parsed.sitemaps) {
+    for (const childUrl of parsed.sitemaps.filter(onHost)) {
       try {
-        const childRes = await fetchPage(childUrl, ctx.fetchOptions);
+        const childRes = await fetchPage(childUrl, sitemapFetch);
         if (childRes.status === 200) {
+          if (childRes.truncated) findings.push(responseTooLarge(childUrl, 'sitemap', childRes.headers, 'sitemap'));
           const childParsed = parseSitemapXml(childRes.body);
           if (childParsed.type === 'urlset') {
-            allUrls.push(...childParsed.urls.map((u) => u.loc));
+            allUrls.push(...childParsed.urls.map((u) => u.loc).filter(onHost));
           }
         }
       } catch {
@@ -99,6 +138,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
       }
     }
     ctx.sitemapUrls = allUrls;
+    findings.push(...crossHostFinding(offHost, sitemapUrl));
 
     findings.push({
       code: 'SITEMAP_MISSING',
@@ -128,27 +168,29 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
   }
 
   // Store URLs for crawl mode
-  ctx.sitemapUrls = parsed.urls.map((u) => u.loc);
+  const ownUrls = parsed.urls.map((u) => u.loc).filter(onHost);
+  ctx.sitemapUrls = ownUrls;
+  findings.push(...crossHostFinding(offHost, sitemapUrl));
 
   // 5. Sample URLs for status checks
-  const sample = parsed.urls.slice(0, SITEMAP_SAMPLE_SIZE);
+  const sample = ownUrls.slice(0, SITEMAP_SAMPLE_SIZE);
   let errorCount = 0;
 
-  for (const entry of sample) {
+  for (const loc of sample) {
     try {
-      const { status } = await fetchHead(entry.loc, ctx.fetchOptions);
+      const { status } = await fetchHead(loc, ctx.fetchOptions);
       if (status >= 400) {
         errorCount++;
         findings.push({
           code: 'SITEMAP_URL_ERROR',
           severity: 'warning',
           category: 'sitemap',
-          message: `Sitemap URL returns ${status}: ${entry.loc}`,
+          message: `Sitemap URL returns ${status}: ${loc}`,
           explanation:
             'Sitemap URLs returning error status codes waste crawl budget and signal poor site quality.',
           suggestion: 'Remove broken URLs from the sitemap or fix the underlying pages.',
           details: { status },
-          url: entry.loc,
+          url: loc,
         });
       }
     } catch {
@@ -156,7 +198,7 @@ export async function auditSitemap(ctx: AuditContext): Promise<AuditFinding[]> {
     }
   }
 
-  if (errorCount === 0) {
+  if (errorCount === 0 && sample.length > 0) {
     findings.push({
       code: 'SITEMAP_MISSING',
       severity: 'pass',

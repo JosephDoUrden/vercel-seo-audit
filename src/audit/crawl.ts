@@ -1,13 +1,15 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { DEFAULT_CRAWL_LIMIT, CRAWL_CONCURRENCY } from '../constants.js';
 import { fetchPage } from '../utils/http.js';
+import { responseTooLarge } from '../utils/tooLarge.js';
+import { reachesPrivateAddress } from '../utils/url.js';
 import {
   getNoindexDirective,
   getTitle,
   getMetaTag,
   getCanonicalUrl,
+  parseHtml,
 } from '../utils/html-parser.js';
-import * as cheerio from 'cheerio';
 
 export async function auditCrawl(ctx: AuditContext): Promise<AuditFinding[]> {
   const findings: AuditFinding[] = [];
@@ -17,7 +19,9 @@ export async function auditCrawl(ctx: AuditContext): Promise<AuditFinding[]> {
   }
 
   const limit = ctx.crawlLimit ?? DEFAULT_CRAWL_LIMIT;
-  const urls = ctx.sitemapUrls.slice(0, limit);
+  // The sitemap module already dropped URLs on other hosts; this keeps a
+  // private address out even when ctx.sitemapUrls was filled some other way.
+  const urls = ctx.sitemapUrls.filter((u) => !reachesPrivateAddress(u, ctx.normalizedUrl)).slice(0, limit);
   const total = urls.length;
 
   // Process in batches of CRAWL_CONCURRENCY
@@ -54,10 +58,11 @@ async function auditPage(
   // body in memory until the audit ends.
   const { timeout, userAgent } = ctx.fetchOptions;
   try {
-    const res = await fetchPage(pageUrl, { timeout, userAgent });
+    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl });
     body = res.body;
     status = res.status;
     headers = res.headers;
+    if (res.truncated) findings.push(responseTooLarge(pageUrl, 'crawl', headers));
   } catch {
     findings.push({
       code: 'CRAWL_PAGE_ERROR',
@@ -171,7 +176,7 @@ async function auditPage(
   }
 
   // Missing JSON-LD
-  const $ = cheerio.load(body);
+  const $ = parseHtml(body);
   const jsonldScripts = $('script[type="application/ld+json"]');
   if (jsonldScripts.length === 0) {
     findings.push({

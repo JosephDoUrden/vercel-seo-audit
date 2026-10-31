@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runAudit, phases } from './runner.js';
 import { MODULE_IDS } from './types.js';
 
-vi.mock('./utils/http.js', () => ({
+vi.mock('./utils/http.js', async (importOriginal) => ({
+  RedirectError: (await importOriginal<typeof import('./utils/http.js')>()).RedirectError,
   fetchPage: vi.fn(),
 }));
 
@@ -23,7 +24,7 @@ vi.mock('./audit/index.js', () => ({
   auditStreamedMetadata: vi.fn(),
 }));
 
-import { fetchPage } from './utils/http.js';
+import { fetchPage, RedirectError } from './utils/http.js';
 import {
   auditRedirects,
   auditRobots,
@@ -258,10 +259,34 @@ describe('runAudit', () => {
     ]);
 
     const report = await runAudit('https://example.com');
-    // redirects module should be excluded but robots should still be present
-    const moduleNames = report.modules.map((m) => m.module);
-    expect(moduleNames).toContain('robots');
-    expect(moduleNames).not.toContain('redirects');
+    const redirects = report.modules.find((m) => m.module === 'redirects');
+
+    // The other modules still run; the failed one reports the failure.
+    expect(report.modules.find((m) => m.module === 'robots')?.findings).toHaveLength(1);
+    expect(redirects?.findings).toEqual([
+      expect.objectContaining({
+        code: 'MODULE_FAILED',
+        severity: 'error',
+        category: 'redirect',
+        details: { module: 'redirects', message: 'Unexpected error' },
+      }),
+    ]);
+    expect(redirects?.findings[0].message).toContain('redirects');
+    expect(report.summary.errors).toBe(1);
+  });
+
+  it('keeps the module order when one fails, and names a non-Error rejection', async () => {
+    mockCrawl.mockRejectedValue('boom');
+    mockStructuredData.mockRejectedValue(new TypeError('x is undefined'));
+
+    const report = await runAudit('https://example.com', { crawl: 3 });
+    const failed = report.modules.flatMap((m) => m.findings).filter((f) => f.code === 'MODULE_FAILED');
+
+    expect(report.modules.map((m) => m.module)).toEqual([...MODULE_IDS]);
+    expect(failed.map((f) => [f.category, f.details])).toEqual([
+      ['structured-data', { module: 'structuredData', message: 'x is undefined' }],
+      ['crawl', { module: 'crawl', message: 'boom' }],
+    ]);
   });
 
   it('normalizes the input URL', async () => {
@@ -344,16 +369,262 @@ describe('runAudit', () => {
     expect(ctx.fetchOptions.cache?.size).toBe(0);
   });
 
-  it('leaves the shared page unset when the up-front fetch fails', async () => {
-    mockFetchPage.mockRejectedValue(new Error('timeout'));
+});
+
+describe('runAudit when the target cannot be audited', () => {
+  const everyModule = () => [
+    mockRobots,
+    mockRedirects,
+    mockSitemap,
+    mockMetadata,
+    mockFavicon,
+    mockNextjs,
+    mockStructuredData,
+    mockI18n,
+    mockImages,
+    mockSecurity,
+    mockPerformance,
+    mockVercel,
+    mockStreamedMetadata,
+    mockCrawl,
+  ];
+  const htmlModules = () => [
+    mockMetadata,
+    mockFavicon,
+    mockStructuredData,
+    mockI18n,
+    mockImages,
+    mockPerformance,
+    mockStreamedMetadata,
+  ];
+  const headerModules = () => [mockRobots, mockRedirects, mockSitemap, mockNextjs, mockSecurity, mockVercel];
+
+  it('reports one TARGET_UNREACHABLE error and runs no module when the fetch fails', async () => {
+    mockFetchPage.mockRejectedValue(
+      new TypeError('fetch failed', { cause: new Error('getaddrinfo ENOTFOUND no-such-host.invalid') }),
+    );
+
+    const report = await runAudit('https://no-such-host.invalid', { crawl: 5 });
+
+    for (const mock of everyModule()) expect(mock).not.toHaveBeenCalled();
+    expect(report.modules).toHaveLength(1);
+    expect(report.modules[0].module).toBe('target');
+    expect(report.modules[0].findings).toHaveLength(1);
+    expect(report.modules[0].findings[0]).toMatchObject({
+      code: 'TARGET_UNREACHABLE',
+      severity: 'error',
+      category: 'indexing',
+      url: 'https://no-such-host.invalid/',
+      details: { error: 'fetch failed: getaddrinfo ENOTFOUND no-such-host.invalid' },
+    });
+    expect(report.modules[0].findings[0].message).toContain('ENOTFOUND');
+    expect(report.summary).toEqual({ errors: 1, warnings: 0, info: 0, passed: 0 });
+    expect(report.page).toEqual({ status: null, finalUrl: null, nextjs: false });
+  });
+
+  it.each([
+    ['loop', 'Redirect loop at https://example.com/loop/0'],
+    ['limit', 'More than 20 redirects from https://example.com/loop/0'],
+  ] as const)('runs the modules on a redirect %s instead of calling the target unreachable', async (kind, message) => {
+    mockFetchPage.mockRejectedValue(new RedirectError(kind, message));
+
+    const report = await runAudit('https://example.com/loop/0');
+
+    expect(report.modules.map((m) => m.module)).not.toContain('target');
+    expect(mockRedirects).toHaveBeenCalledTimes(1);
+    expect(mockMetadata).toHaveBeenCalledTimes(1);
+    expect(mockRedirects.mock.calls[0][0].html).toBeUndefined();
+    expect(report.page).toEqual({ status: null, finalUrl: null, nextjs: false });
+  });
+
+  it('tells every fetch which URL is being audited, for the private-address check', async () => {
+    await runAudit('https://example.com/a');
+
+    expect(mockFetchPage.mock.calls[0][1]).toMatchObject({ auditedUrl: 'https://example.com/a' });
+    expect(mockRobots.mock.calls[0][0].fetchOptions.auditedUrl).toBe('https://example.com/a');
+  });
+
+  it('uses the plain message when the error has no cause', async () => {
+    mockFetchPage.mockRejectedValue(new Error('Timed out after 2000 ms fetching https://example.com/'));
 
     const report = await runAudit('https://example.com');
 
-    expect(report.modules.map((m) => m.module)).toContain('metadata');
-    const ctx = mockMetadata.mock.calls[0][0];
+    expect(report.modules[0].findings[0].details).toEqual({
+      error: 'Timed out after 2000 ms fetching https://example.com/',
+    });
+  });
+
+  it('runs nothing on a run limited with only either', async () => {
+    mockFetchPage.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const report = await runAudit('https://example.com', { only: ['vercel'] });
+
+    expect(mockVercel).not.toHaveBeenCalled();
+    expect(report.modules.map((m) => m.module)).toEqual(['target']);
+  });
+
+  it('can still be ignored out of the counts', async () => {
+    mockFetchPage.mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const report = await runAudit('https://example.com', { ignore: ['TARGET_UNREACHABLE'] });
+
+    expect(report.modules[0].findings[0].ignored).toBe(true);
+    expect(report.summary.errors).toBe(0);
+  });
+
+  it.each([404, 410, 500, 503])('reports TARGET_HTTP_ERROR for a %i page and still runs the modules', async (status) => {
+    mockFetchPage.mockResolvedValue({
+      body: 'nope',
+      status,
+      headers: new Headers({ 'content-type': 'text/html' }),
+      finalUrl: 'https://example.com/missing',
+    });
+
+    const report = await runAudit('https://example.com/missing');
+    const target = report.modules.find((m) => m.module === 'target');
+
+    expect(target?.findings).toEqual([
+      expect.objectContaining({
+        code: 'TARGET_HTTP_ERROR',
+        severity: 'error',
+        category: 'indexing',
+        url: 'https://example.com/missing',
+        details: { status, finalUrl: 'https://example.com/missing' },
+      }),
+    ]);
+    expect(target?.findings[0].message).toContain(String(status));
+    expect(mockMetadata).toHaveBeenCalledTimes(1);
+    expect(report.modules[0].module).toBe('target');
+  });
+
+  it('leaves a challenged entry page to EDGE_CHALLENGE instead of adding TARGET_HTTP_ERROR', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html>challenge</html>',
+      status: 403,
+      headers: new Headers({ 'x-vercel-mitigated': 'challenge' }),
+      finalUrl: 'https://example.com/',
+    });
+
+    const report = await runAudit('https://example.com');
+
+    expect(report.modules.map((m) => m.module)).not.toContain('target');
+    expect(mockVercel).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds no target finding for a 2xx HTML page', async () => {
+    const report = await runAudit('https://example.com');
+    expect(report.modules.map((m) => m.module)).not.toContain('target');
+  });
+
+  it('treats a page without a content-type as HTML', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html></html>',
+      status: 200,
+      headers: new Headers(),
+      finalUrl: 'https://example.com/',
+    });
+
+    const report = await runAudit('https://example.com');
+
+    expect(report.modules.map((m) => m.module)).not.toContain('target');
+    expect(mockMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['text/html; charset=utf-8', 'application/xhtml+xml', 'TEXT/HTML'])('treats %s as HTML', async (type) => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html></html>',
+      status: 200,
+      headers: new Headers({ 'content-type': type }),
+      finalUrl: 'https://example.com/',
+    });
+
+    const report = await runAudit('https://example.com');
+
+    expect(report.modules.map((m) => m.module)).not.toContain('target');
+  });
+
+  it('reports TARGET_NOT_HTML for a PDF and runs only the modules that do not read HTML', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '%PDF-1.7',
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/pdf' }),
+      finalUrl: 'https://example.com/doc.pdf',
+    });
+
+    const report = await runAudit('https://example.com/doc.pdf');
+    const target = report.modules.find((m) => m.module === 'target');
+
+    expect(target?.findings).toEqual([
+      expect.objectContaining({
+        code: 'TARGET_NOT_HTML',
+        severity: 'warning',
+        category: 'indexing',
+        details: { contentType: 'application/pdf', bytes: 8 },
+      }),
+    ]);
+    for (const mock of htmlModules()) expect(mock).not.toHaveBeenCalled();
+    for (const mock of headerModules()) expect(mock).toHaveBeenCalledTimes(1);
+
+    // Header modules get the headers but not the body as HTML.
+    const ctx = mockSecurity.mock.calls[0][0];
+    expect(ctx.headers).toEqual({ 'content-type': 'application/pdf' });
     expect(ctx.html).toBeUndefined();
-    expect(ctx.headers).toBeUndefined();
-    expect(ctx.finalUrl).toBeUndefined();
+    expect(ctx.finalUrl).toBe('https://example.com/doc.pdf');
+  });
+
+  it('reports TARGET_NOT_HTML for an empty HTML body', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '  \n',
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html' }),
+      finalUrl: 'https://example.com/',
+    });
+
+    const report = await runAudit('https://example.com');
+    const finding = report.modules.find((m) => m.module === 'target')?.findings[0];
+
+    expect(finding).toMatchObject({ code: 'TARGET_NOT_HTML', details: { contentType: 'text/html', bytes: 3 } });
+    expect(finding?.message).toMatch(/empty/i);
+    for (const mock of htmlModules()) expect(mock).not.toHaveBeenCalled();
+  });
+
+  it('reports RESPONSE_TOO_LARGE for a page cut at the body cap and audits what was read', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '<html><head><title>Big</title></head>',
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html', 'content-length': '314572800' }),
+      finalUrl: 'https://example.com/',
+      truncated: true,
+    });
+
+    const report = await runAudit('https://example.com');
+    const target = report.modules.find((m) => m.module === 'target');
+
+    expect(target?.findings).toEqual([
+      expect.objectContaining({
+        code: 'RESPONSE_TOO_LARGE',
+        severity: 'warning',
+        category: 'performance',
+        url: 'https://example.com/',
+        details: { bytes: 314572800, limit: 10 * 1024 * 1024 },
+      }),
+    ]);
+    expect(mockMetadata.mock.calls[0][0].html).toBe('<html><head><title>Big</title></head>');
+  });
+
+  it('keeps an only selection to the header modules it named', async () => {
+    mockFetchPage.mockResolvedValue({
+      body: '%PDF',
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/pdf' }),
+      finalUrl: 'https://example.com/',
+    });
+
+    const report = await runAudit('https://example.com', { only: ['metadata', 'security'] });
+
+    expect(mockMetadata).not.toHaveBeenCalled();
+    expect(mockSecurity).toHaveBeenCalledTimes(1);
+    expect(report.modules.map((m) => m.module)).toEqual(['target', 'security']);
   });
 });
 

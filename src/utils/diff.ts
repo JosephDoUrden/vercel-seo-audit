@@ -6,10 +6,13 @@ const toKey = (f: AuditFinding) => `${f.code}::${f.url ?? ''}`;
  * Compares two reports by finding code and URL. When either run was limited
  * with `--only`, both are cut down to the modules they share, so findings from
  * a module only one of them ran are reported as neither new nor resolved.
+ * The `target` findings (the up-front fetch of the page) are always compared,
+ * since every run makes that fetch.
  */
 export function diffReports(current: AuditReport, previous: AuditReport): DiffResult {
   const shared = (m: { module: string }) =>
-    (!current.only || current.only.includes(m.module as ModuleId))
+    m.module === 'target'
+    || (!current.only || current.only.includes(m.module as ModuleId))
     && (!previous.only || previous.only.includes(m.module as ModuleId));
 
   // Ignored findings stay in the diff (tagged by formatDiff). The previous
