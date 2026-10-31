@@ -1,15 +1,16 @@
 # Roadmap
 
-Last revised 31 Oct 2026, against v2.10.0. Items move up or down as evidence arrives; dates are
+Last revised 31 Oct 2026 (evening), against v2.12.0. Items move up or down as evidence arrives; dates are
 targets, not promises. Anything marked *not planned* in the issue tracker stays out unless a user
 turns up with a concrete case.
 
 The tool keeps its model: it looks only at what the deployed site sends back. No JavaScript
 execution, no source reading, no API keys. Every item below fits inside that.
 
-## Phase 1: accuracy and robustness (Nov 2026)
+## Phase 1: accuracy and robustness
 
 Found by running v2.10.0 against live sites and a hostile fixture server on 31 Oct 2026.
+All shipped in v2.11.0 (31 Oct 2026) except the last row.
 
 | Item | Why | Size |
 |---|---|---|
@@ -21,11 +22,15 @@ Found by running v2.10.0 against live sites and a hostile fixture server on 31 O
 | Same-origin filter on sitemap `<loc>`, child sitemaps and crawl | A sitemap listing another host makes the tool fetch it, which is an SSRF relay when run in CI | S |
 | Module failures surface in the report | A module that throws today leaves no finding and no exit-code trace | S |
 | Findings use the final URL | `http://` input and apex-to-www moves produce canonical and trailing-slash artefacts | S |
-| Pass findings get their own codes | `SITEMAP_MISSING` with severity `pass` misleads anyone filtering JSON by code | S |
+| Pass findings get their own codes | `SITEMAP_MISSING` with severity `pass` misleads anyone filtering JSON by code. Open | S |
 
-## Phase 2: checks (Dec 2026 to Feb 2027)
+## Phase 2: checks
 
 Each sourced to a Google Search Central page or a Next.js issue, all read 31 Oct 2026.
+Shipped: edge challenge, robots.txt status semantics and the AI-crawler matrix (v2.11.0 and
+v2.12.0), canonical integrity, host leak, strict sitemap validation, render-asset blocking, the
+2 MB cut-off, user-agent parity and the entry-URL redirect finding (v2.12.0), the soft-404 probe
+(v2.13.0). Open: crawl pages getting the homepage checks, and the smaller items below.
 
 | Item | What it detects | Source | Size |
 |---|---|---|---|
@@ -42,15 +47,17 @@ Each sourced to a Google Search Central page or a Next.js issue, all read 31 Oct
 | Crawl pages get the homepage checks | hreflang, images, Open Graph and streamed metadata run only on the entry page today | Code | M |
 
 Smaller: `unavailable_after` in the past, `max-snippet:0`, a `googlebot` meta that conflicts with
-`robots`, and the same JSON-LD block appearing twice.
+`robots`, the same JSON-LD block appearing twice, `SITEMAP_LASTMOD_IDENTICAL` for a sitemap where
+only the dynamic routes share one build timestamp, a fetch cache keyed by user agent so the parity
+module can share requests, and a redirect-chain finding that says when the 20-hop walk was cut.
 
-## Phase 3: agents (Dec 2026 onward)
+## Phase 3: agents
 
 Coding agents already run CLIs. The cheap step is to make the output something an agent can act on
 without guessing, then teach it the procedure.
 
 1. `--format agent`: compact JSON, no pass findings, stable codes, a fix hint per finding, and an
-   `explain <CODE>` subcommand. Ships with `AGENTS.md`.
+   `explain <CODE>` subcommand. Ships with `AGENTS.md`. Shipped in v2.12.0.
 2. An Agent Skill (`SKILL.md`) that runs the CLI, reads the codes, edits `app/sitemap.ts`,
    `app/robots.ts` or `next.config.js`, and re-runs. Published where Claude Code, Codex and Cursor
    look for skills.
