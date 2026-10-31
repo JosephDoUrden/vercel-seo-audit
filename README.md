@@ -122,7 +122,15 @@ const exitCode = getExitCode(report.summary, false);
 console.log(formatAgent(report, { version: VERSION, exitCode }));
 ```
 
-`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`) and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address. `diffReports`, `describeCode`, `ISSUE_CODES`, `MODULE_IDS` and the report types are exported too. The package is ESM only.
+`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 30_000);
+await runAudit('https://your-site.com', { signal: controller.signal });
+```
+
+`diffReports`, `describeCode`, `ISSUE_CODES`, `MODULE_IDS` and the report types are exported too. The package is ESM only.
 
 ---
 

@@ -210,6 +210,27 @@ export interface RunAuditOptions {
   ignore?: readonly IssueCode[];
   /** Run only these modules (and the modules they depend on). The page is still fetched once. */
   only?: readonly ModuleId[];
+  /**
+   * Cancels the audit. Every request in flight is aborted, no new one starts, and
+   * `runAudit` rejects with an error named `AbortError` instead of returning a
+   * partial report.
+   */
+  signal?: AbortSignal;
+}
+
+// The rejection for an aborted audit: the signal's reason when it is already an
+// AbortError, otherwise an AbortError that carries it as its cause
+// (AbortSignal.timeout() fires with a TimeoutError, a caller may pass anything).
+function abortError(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') return reason;
+  const err = new Error('The audit was aborted', { cause: reason });
+  err.name = 'AbortError';
+  return err;
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortError(signal);
 }
 
 /**
@@ -217,8 +238,33 @@ export interface RunAuditOptions {
  * redirects, sitemap URLs and crawled links included, is refused when it points at
  * a private address and `url` does not, so a caller passing user input gets the same
  * guard as the CLI.
+ * With `opts.signal`, it rejects as soon as the signal fires.
  */
 export async function runAudit(url: string, opts: RunAuditOptions = {}): Promise<AuditReport> {
+  const { signal } = opts;
+  if (!signal) return audit(url, opts);
+  throwIfAborted(signal);
+
+  // Raced, so the caller is answered at once even while a module is still
+  // unwinding; the requests themselves are torn down through fetchOptions.
+  let stop = (): void => undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    const onAbort = (): void => reject(abortError(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    stop = () => signal.removeEventListener('abort', onAbort);
+  });
+  const run = audit(url, opts);
+  // The loser of the race still settles; its rejection is not the caller's to handle.
+  run.catch(() => undefined);
+  try {
+    return await Promise.race([run, aborted]);
+  } finally {
+    stop();
+  }
+}
+
+async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
+  const { signal } = opts;
   const start = Date.now();
   const normalized = normalizeUrl(url);
 
@@ -227,6 +273,7 @@ export async function runAudit(url: string, opts: RunAuditOptions = {}): Promise
     userAgent: opts.userAgent,
     cache: new Map(),
     auditedUrl: normalized,
+    signal,
   };
 
   const ctx: AuditContext = {
@@ -269,6 +316,7 @@ export async function runAudit(url: string, opts: RunAuditOptions = {}): Promise
       fetchOptions.cache?.clear();
     }
   } catch (err) {
+    throwIfAborted(signal);
     // A redirect loop or a chain past MAX_REDIRECTS is the site answering; the
     // redirects module reports it, and the HTML modules find no page.
     if (err instanceof RedirectError) reached = true;
@@ -290,6 +338,9 @@ export async function runAudit(url: string, opts: RunAuditOptions = {}): Promise
     if (modules.length > 0) {
       allModules.push(...(await runModules(modules, ctx)));
     }
+    // The modules report a failed request as a finding, so an abort looks like a
+    // phase that ran; it must not reach the report.
+    throwIfAborted(signal);
   }
 
   // Mark ignored findings. They stay in the report but not in the counts.

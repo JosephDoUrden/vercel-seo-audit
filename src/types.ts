@@ -451,6 +451,8 @@ export interface FetchOptions {
    * start URL or redirect hop alike. Unset, each call is judged by its own start URL.
    */
   auditedUrl?: string;
+  /** The caller's abort: no request starts once it fires, and every one in flight is torn down. */
+  signal?: AbortSignal;
 }
 
 export interface AuditContext {

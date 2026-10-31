@@ -91,7 +91,12 @@ function read($: cheerio.CheerioAPI, body: string, header: (name: string) => str
 async function probe(url: string, userAgent: string, ctx: AuditContext): Promise<View | undefined> {
   let page: Awaited<ReturnType<typeof fetchPage>>;
   try {
-    page = await fetchPage(url, { timeout: ctx.fetchOptions.timeout, userAgent, auditedUrl: ctx.fetchOptions.auditedUrl });
+    page = await fetchPage(url, {
+      timeout: ctx.fetchOptions.timeout,
+      userAgent,
+      auditedUrl: ctx.fetchOptions.auditedUrl,
+      signal: ctx.fetchOptions.signal,
+    });
   } catch {
     return undefined;
   }

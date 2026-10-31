@@ -113,3 +113,103 @@ describe('runAudit as a library', () => {
     expect(requestedHosts().filter(isPrivateAddress)).toEqual([]);
   });
 });
+
+describe('runAudit with an AbortSignal', () => {
+  const page = '<html><head><title>Example</title></head><body>Hello</body></html>';
+  const text = (body: string, type: string) => new Response(body, { status: 200, headers: { 'content-type': type } });
+  const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Rejects with the signal's reason when it fires, the way undici's fetch does.
+  const honour = (signal: AbortSignal | null | undefined) =>
+    new Promise<Response>((_, reject) => {
+      if (signal?.aborted) return reject(signal.reason);
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+
+  it('rejects with an AbortError while the first fetch never answers', async () => {
+    const signals: (AbortSignal | null | undefined)[] = [];
+    mockFetch.mockImplementation((_input, init) => {
+      signals.push(init?.signal);
+      return new Promise<Response>(() => undefined);
+    });
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 10);
+
+    await expect(runAudit('https://example.com/', { signal: controller.signal, timeout: 1000 }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+
+    const started = mockFetch.mock.calls.length;
+    expect(started).toBe(1);
+    expect(signals.every((s) => s?.aborted)).toBe(true);
+    await pause(50);
+    expect(mockFetch.mock.calls.length).toBe(started);
+  });
+
+  it('stops the crawl: no request starts after the abort', async () => {
+    const controller = new AbortController();
+    const urls = Array.from({ length: 40 }, (_, i) => `https://example.com/page-${i}`);
+    const sitemap = `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${
+      urls.map((u) => `<url><loc>${u}</loc></url>`).join('')}</urlset>`;
+    const serve = site({
+      'https://example.com/': () => html(page),
+      'https://example.com/robots.txt': () => text('User-agent: *\nAllow: /\nSitemap: https://example.com/sitemap.xml\n', 'text/plain'),
+      'https://example.com/sitemap.xml': () => text(sitemap, 'application/xml'),
+    });
+    mockFetch.mockImplementation((input, init) => {
+      if (String(input).includes('/page-') && init?.method !== 'HEAD') {
+        if (!controller.signal.aborted) setTimeout(() => controller.abort(), 10);
+        return honour(init?.signal);
+      }
+      return serve(input);
+    });
+
+    await expect(runAudit('https://example.com/', { crawl: 40, signal: controller.signal, timeout: 1000 }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+
+    const started = mockFetch.mock.calls.length;
+    await pause(50);
+    expect(mockFetch.mock.calls.length).toBe(started);
+    // One batch of the crawl started; the abort kept the other 35 pages from being asked for.
+    const crawled = mockFetch.mock.calls.filter(([input, init]) => String(input).includes('/page-') && init?.method !== 'HEAD').length;
+    expect(crawled).toBeGreaterThan(0);
+    expect(crawled).toBeLessThanOrEqual(5);
+  });
+
+  it('cancels a body that stalls after the headers came in', async () => {
+    const cancel = vi.fn();
+    mockFetch.mockImplementation(async () => new Response(
+      new ReadableStream({
+        start: (c) => c.enqueue(new TextEncoder().encode('<html><head>')),
+        cancel,
+      }),
+      { status: 200, headers: { 'content-type': 'text/html' } },
+    ));
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 10);
+
+    await expect(runAudit('https://example.com/', { signal: controller.signal, timeout: 1000 }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    await pause(0);
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it('starts no request when the signal has already fired', async () => {
+    await expect(runAudit('https://example.com/', { signal: AbortSignal.abort() }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('names the rejection AbortError whatever the reason, and keeps the reason as its cause', async () => {
+    const reason = new Error('the client went away');
+    await expect(runAudit('https://example.com/', { signal: AbortSignal.abort(reason) }))
+      .rejects.toMatchObject({ name: 'AbortError', cause: reason });
+  });
+
+  it('returns the full report when the signal never fires', async () => {
+    mockFetch.mockImplementation(site({ 'https://example.com/': () => html(page) }));
+
+    const report = await runAudit('https://example.com/', { only: ['metadata'], signal: new AbortController().signal, timeout: 1000 });
+
+    expect(report.modules.map((m) => m.module)).toEqual(['metadata']);
+  });
+});
