@@ -30,6 +30,7 @@ async function probe(url: string, ctx: AuditContext): Promise<BotView> {
       userAgent: BOT_PROBE_USER_AGENT,
       signal: ctx.fetchOptions.signal,
       maxBytes: ctx.fetchOptions.maxBytes,
+      allowPrivate: ctx.fetchOptions.allowPrivate,
     });
   } catch {
     return { botRequest: 'failed', reason: 'error' };

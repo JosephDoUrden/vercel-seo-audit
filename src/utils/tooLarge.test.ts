@@ -37,4 +37,14 @@ describe('responseTooLarge', () => {
     expect(odd.message).toContain('larger than 500,000 bytes');
     expect(odd.explanation).toContain('first 500,000 bytes were read');
   });
+
+  it("is info, not a warning, when the cap was the caller's and below the default", () => {
+    const lowered = responseTooLarge('https://example.com/', 'performance', new Headers(), 'html', 500_000);
+    const defaulted = responseTooLarge('https://example.com/', 'performance', new Headers(), 'html');
+
+    expect(lowered.severity).toBe('info');
+    expect(lowered.explanation).toMatch(/cap set by the caller/);
+    expect(defaulted.severity).toBe('warning');
+    expect(defaulted.explanation).not.toMatch(/caller/);
+  });
 });

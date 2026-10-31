@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AuditContext } from '../types.js';
 import { auditRobots } from './robots.js';
+import { MAX_HTML_BYTES } from '../constants.js';
 
 vi.mock('../utils/http.js', () => ({
   fetchPage: vi.fn(),
@@ -34,6 +35,14 @@ beforeEach(() => {
 });
 
 describe('auditRobots', () => {
+  it('reads robots.txt up to MAX_HTML_BYTES even when the caller lowered the page cap', async () => {
+    mockFetchPage.mockResolvedValue(robotsPage('User-agent: *\nAllow: /\n'));
+
+    await auditRobots(makeCtx({ fetchOptions: { maxBytes: 1000, timeout: 5 } }));
+
+    expect(mockFetchPage.mock.calls[0][1]).toMatchObject({ maxBytes: MAX_HTML_BYTES, timeout: 5 });
+  });
+
   it('reports ROBOTS_MISSING when status is not 200', async () => {
     mockFetchPage.mockResolvedValue({
       body: '',

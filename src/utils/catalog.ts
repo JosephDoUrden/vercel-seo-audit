@@ -9,7 +9,7 @@ export type FindingSource = ModuleId | 'target';
 // is left out: any module can report it, under that module's category.
 // catalog.test.ts checks this against the finding literals in the sources.
 const SOURCES: readonly (readonly [FindingSource, IssueCategory, readonly IssueCode[]])[] = [
-  ['target', 'indexing', ['TARGET_UNREACHABLE', 'TARGET_HTTP_ERROR', 'TARGET_NOT_HTML']],
+  ['target', 'indexing', ['TARGET_UNREACHABLE', 'TARGET_PRIVATE_ADDRESS', 'TARGET_HTTP_ERROR', 'TARGET_NOT_HTML']],
   ['target', 'performance', ['RESPONSE_TOO_LARGE']],
   ['robots', 'robots', [
     'ROBOTS_MISSING', 'ROBOTS_BLOCKS_ALL', 'ROBOTS_BLOCKS_GOOGLEBOT', 'ROBOTS_NO_SITEMAP', 'ROBOTS_SERVER_ERROR',

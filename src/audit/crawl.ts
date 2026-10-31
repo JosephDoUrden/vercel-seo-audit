@@ -58,7 +58,7 @@ export async function auditCrawl(ctx: AuditContext): Promise<AuditFinding[]> {
   const limit = ctx.crawlLimit ?? DEFAULT_CRAWL_LIMIT;
   // The sitemap module already dropped URLs on other hosts; this keeps a
   // private address out even when ctx.sitemapUrls was filled some other way.
-  const urls = ctx.sitemapUrls.filter((u) => !reachesPrivateAddress(u, ctx.normalizedUrl)).slice(0, limit);
+  const urls = ctx.sitemapUrls.filter((u) => ctx.fetchOptions.allowPrivate || !reachesPrivateAddress(u, ctx.normalizedUrl)).slice(0, limit);
   const total = urls.length;
 
   // Process in batches of CRAWL_CONCURRENCY
@@ -170,9 +170,9 @@ async function auditPage(
   let finalUrl: string;
   // Each crawled page is fetched once, so the audit cache would only pin every
   // body in memory until the audit ends.
-  const { timeout, userAgent, signal, maxBytes } = ctx.fetchOptions;
+  const { timeout, userAgent, signal, maxBytes, allowPrivate } = ctx.fetchOptions;
   try {
-    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl, signal, maxBytes });
+    const res = await fetchPage(pageUrl, { timeout, userAgent, auditedUrl: ctx.normalizedUrl, signal, maxBytes, allowPrivate });
     body = res.body;
     status = res.status;
     headers = res.headers;

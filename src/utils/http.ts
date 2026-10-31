@@ -99,6 +99,12 @@ function auditedFrom(url: string, opts?: FetchOptions): string {
   return opts?.auditedUrl ?? url;
 }
 
+// True when `url` is a private address the call may not reach: see reachesPrivateAddress,
+// and `allowPrivate`, which turns the guard off.
+function blocked(url: string, from: string, opts?: FetchOptions): boolean {
+  return !opts?.allowPrivate && reachesPrivateAddress(url, from);
+}
+
 /**
  * A request refused because it would reach a private address (see isPrivateAddress)
  * from a public audit: a literal one in the URL, or one the name resolved to when
@@ -168,9 +174,20 @@ export const guardedLookup: LookupFunction = (hostname, options, callback) => {
 // in this file stay in front of it.
 let guardedAgent: Agent | undefined;
 
-// The dispatcher for a request in this call: the guarded one unless the audited
-// URL is itself on a private host, whose audit may follow its own links anywhere.
+// The proxy a caller installed with setGlobalDispatcher, by class name so it is found
+// whichever copy of undici made it. The guarded Agent connects directly, so it would
+// skip the proxy without a word.
+function globalProxy(): string | undefined {
+  const dispatcher = (globalThis as Record<symbol, unknown>)[Symbol.for('undici.globalDispatcher.1')];
+  const name = (dispatcher as { constructor?: { name?: string } } | undefined)?.constructor?.name;
+  return name === 'ProxyAgent' || name === 'EnvHttpProxyAgent' ? name : undefined;
+}
+
+// The dispatcher for a request in this call: the guarded one unless the audited URL
+// is itself on a private host, whose audit may follow its own links anywhere, or the
+// caller turned the guard off.
 function dispatcherFor(url: string, opts?: FetchOptions): Agent | undefined {
+  if (opts?.allowPrivate) return undefined;
   let local = false;
   try {
     local = isPrivateAddress(new URL(auditedFrom(url, opts)).hostname);
@@ -178,6 +195,12 @@ function dispatcherFor(url: string, opts?: FetchOptions): Agent | undefined {
     // An audited URL that will not parse gets the guard.
   }
   if (local) return undefined;
+  const proxy = globalProxy();
+  if (proxy) {
+    throw new Error(
+      `A ${proxy} is set as the global dispatcher. The private-address guard connects directly and would bypass it, so the request was not made. Pass allowPrivate (--allow-private) to send requests through the proxy without the guard.`,
+    );
+  }
   guardedAgent ??= new Agent({ connect: { lookup: guardedLookup } });
   return guardedAgent;
 }
@@ -247,7 +270,7 @@ async function walkRedirects(
   const from = auditedFrom(url, opts);
   let current = url;
 
-  if (reachesPrivateAddress(url, from)) {
+  if (blocked(url, from, opts)) {
     return { chain: { hops, finalUrl: url, isCircular: false }, error: refused(url) };
   }
 
@@ -271,7 +294,7 @@ async function walkRedirects(
     if (location && status >= 300 && status < 400) {
       const resolved = new URL(location, current).href;
       hops.push({ url: current, status, location: resolved });
-      if (reachesPrivateAddress(resolved, from)) {
+      if (blocked(resolved, from, opts)) {
         const error = refusedRedirect(resolved);
         return { chain: { hops, finalUrl: resolved, isCircular: false }, error };
       }
@@ -417,7 +440,7 @@ export function fetchHead(
     // checked before it is requested.
     try {
       const from = auditedFrom(url, opts);
-      if (reachesPrivateAddress(url, from)) throw refused(url);
+      if (blocked(url, from, opts)) throw refused(url);
       let current = url;
       for (let i = 0; ; i++) {
         throwIfAborted(opts);
@@ -427,7 +450,7 @@ export function fetchHead(
           return { status: res.status, headers: res.headers };
         }
         const next = new URL(location, current).href;
-        if (reachesPrivateAddress(next, from)) throw refusedRedirect(next);
+        if (blocked(next, from, opts)) throw refusedRedirect(next);
         current = next;
       }
     } finally {

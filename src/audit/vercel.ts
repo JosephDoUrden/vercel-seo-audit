@@ -86,8 +86,8 @@ interface Recheck {
 // fetchPage would hand back the phase 0 response instead of asking the CDN again.
 async function recheck(url: string, ctx: AuditContext): Promise<Recheck | undefined> {
   try {
-    const { timeout, userAgent, auditedUrl, signal, maxBytes } = ctx.fetchOptions;
-    const page = await fetchPage(url, { timeout, userAgent, auditedUrl, signal, maxBytes });
+    const { timeout, userAgent, auditedUrl, signal, maxBytes, allowPrivate } = ctx.fetchOptions;
+    const page = await fetchPage(url, { timeout, userAgent, auditedUrl, signal, maxBytes, allowPrivate });
     if (page.status < 200 || page.status >= 300 || page.finalUrl !== url) return undefined;
     const headers = Object.fromEntries(page.headers.entries());
     const status = (headers['x-vercel-cache'] ?? '').toUpperCase();

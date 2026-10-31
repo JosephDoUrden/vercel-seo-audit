@@ -121,6 +121,13 @@ export function validateConfig(raw: unknown): SeoAuditConfig {
     config.skipPacks = obj.skipPacks;
   }
 
+  if ('allowPrivate' in obj) {
+    if (typeof obj.allowPrivate !== 'boolean') {
+      throw new Error(`Error in ${CONFIG_FILE}: "allowPrivate" must be a boolean`);
+    }
+    config.allowPrivate = obj.allowPrivate;
+  }
+
   if ('format' in obj) {
     if (obj.format !== 'text' && obj.format !== 'agent') {
       throw new Error(`Error in ${CONFIG_FILE}: "format" must be "text" or "agent"`);

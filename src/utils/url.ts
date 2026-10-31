@@ -83,6 +83,8 @@ function isPrivateIpv4(host: string): boolean {
     (a === 169 && b === 254) || // link-local, where cloud metadata lives
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && Number(m[3]) === 0) || // IETF protocol assignments, 192.0.0.192 metadata included
+    host === '168.63.129.16' || // Azure platform endpoint (wire server)
     (a === 198 && (b === 18 || b === 19)) || // benchmarking, 198.18.0.0/15
     a >= 224 // multicast 224.0.0.0/4 and reserved 240.0.0.0/4, broadcast included
   );
@@ -127,18 +129,25 @@ function isPrivateIpv6(host: string): boolean {
   if (g[0] === 0x64 && g[1] === 0xff9b) return zero(2, 6) ? isPrivateIpv4(ipv4Of(g[6], g[7])) : g[2] === 1;
   // 6to4 2002::/16 carries the IPv4 address in the next two groups.
   if (g[0] === 0x2002) return isPrivateIpv4(ipv4Of(g[1], g[2]));
+  // Teredo 2001::/32 carries the server's IPv4 address in groups 2-3 and the client's,
+  // inverted, in groups 6-7; either one private is enough.
+  if (g[0] === 0x2001 && g[1] === 0) {
+    return isPrivateIpv4(ipv4Of(g[2], g[3])) || isPrivateIpv4(ipv4Of(g[6] ^ 0xffff, g[7] ^ 0xffff));
+  }
   return (
     (g[0] & 0xfe00) === 0xfc00 || // unique local, fc00::/7
     (g[0] & 0xffc0) === 0xfe80 || // link-local, fe80::/10
-    (g[0] & 0xffc0) === 0xfec0 // site-local, fec0::/10
+    (g[0] & 0xffc0) === 0xfec0 || // site-local, fec0::/10
+    (g[0] & 0xff00) === 0xff00 // multicast, ff00::/8
   );
 }
 
 /**
  * True for a loopback, private (RFC 1918), carrier-grade NAT, link-local
  * (169.254.169.254 and other cloud metadata endpoints), benchmarking, reserved,
- * multicast or unspecified address, IPv4 or IPv6, for an IPv6 address that carries
- * one of those IPv4 addresses (mapped, NAT64, 6to4), and for `localhost`. Pass
+ * multicast or unspecified address, IPv4 or IPv6, for 192.0.0.0/24 and the Azure
+ * platform endpoint 168.63.129.16, for an IPv6 address that carries one of those
+ * IPv4 addresses (mapped, NAT64, 6to4, Teredo), and for `localhost`. Pass
  * `new URL(...).hostname`, which has already turned spellings such as `2130706433`
  * or `0x7f.1` into dotted IPv4, or an address from a DNS answer.
  *

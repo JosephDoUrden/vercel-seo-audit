@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } 
 import dns from 'node:dns';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { ProxyAgent } from 'undici';
 import { fetchHead, fetchPage, guardedLookup, PrivateAddressError } from './http.js';
 
 // Names in `.test` answer from this table; anything else in `.test` does not
@@ -131,6 +132,48 @@ describe('names that resolve to a private address', () => {
 
     expect(page.body).toContain('INTERNAL');
     expect(hits).toEqual([`GET internal.test:${port}/home`]);
+  });
+});
+
+describe('allowPrivate', () => {
+  it('lets a public audit reach private names and literals when the caller allows it', async () => {
+    const opts = { ...audit, allowPrivate: true };
+
+    await expect(fetchPage(at('internal.test', '/a'), opts)).resolves.toMatchObject({ status: 200 });
+    await expect(fetchHead(`http://127.0.0.1:${port}/b`, opts)).resolves.toMatchObject({ status: 200 });
+    expect(hits).toEqual([`GET internal.test:${port}/a`, `HEAD 127.0.0.1:${port}/b`]);
+  });
+});
+
+describe('a proxy set as the global dispatcher', () => {
+  const key = Symbol.for('undici.globalDispatcher.1');
+  const g = globalThis as unknown as Record<symbol, unknown>;
+  let saved: unknown;
+
+  beforeEach(() => {
+    saved = g[key];
+    g[key] = new ProxyAgent('http://proxy.test:3128');
+  });
+
+  afterEach(() => {
+    g[key] = saved;
+  });
+
+  it('is refused with a clear error rather than bypassed', async () => {
+    const spy = vi.fn(globalThis.fetch);
+    vi.stubGlobal('fetch', spy);
+
+    await expect(fetchPage('https://public.example/', audit)).rejects.toThrow(/proxy.*allowPrivate/i);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('is used as it is when the guard is off', async () => {
+    const spy = vi.fn(async () => new Response('ok'));
+    vi.stubGlobal('fetch', spy);
+
+    await fetchPage('https://public.example/', { ...audit, allowPrivate: true });
+
+    expect(spy.mock.calls[0][1]).not.toHaveProperty('dispatcher');
   });
 });
 

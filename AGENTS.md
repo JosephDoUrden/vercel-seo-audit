@@ -23,7 +23,7 @@ findings, explanations and timings, and its shape can change. Read `--format age
 ```
 
 Findings come sorted error, warning, info, then in module run order. Pass and ignored findings are
-left out, except an ignored `TARGET_UNREACHABLE`, which stays because the run still exits 2. `fix`
+left out, except an ignored `TARGET_UNREACHABLE` or `TARGET_PRIVATE_ADDRESS`, which stays because the run still exits 2. `fix`
 is the suggested change, or `null`. `message` and `fix` are capped at 500 characters, `details` at
 10 array items and 200 characters a string, and `truncated` is `true` when anything was cut. Control
 characters (other than tab and newline) and bidi overrides are stripped from every string. `skipped` lists the modules that did not run, from
@@ -40,7 +40,8 @@ means. An unknown code exits 2 and names the three closest codes.
 ## Exit codes
 
 `0` means no errors. `1` means at least one error, or at least one warning under `--strict`. `2`
-means the page could not be fetched at all (`TARGET_UNREACHABLE`), or the input was bad; on a
+means the page could not be fetched at all (`TARGET_UNREACHABLE`, or `TARGET_PRIVATE_ADDRESS` for a
+name that resolves to a private address), or the input was bad; on a
 `TARGET_UNREACHABLE` run stdout is still valid JSON with `"exitCode": 2`. On bad input stdout is
 empty and the reason is on stderr.
 

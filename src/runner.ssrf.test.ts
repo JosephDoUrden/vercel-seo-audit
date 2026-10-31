@@ -99,3 +99,22 @@ describe('a public site pointing the audit at a name that resolves to a private 
     expect(JSON.stringify(report)).not.toMatch(/INTERNAL|s3cr3t|leak-canonical/);
   });
 });
+
+describe('auditing a name that resolves to a private address', () => {
+  it('reports TARGET_PRIVATE_ADDRESS, not an unreachable site', async () => {
+    const report = await runAudit(`http://internal.test:${port}/`, { timeout: 3000 });
+
+    const findings = report.modules.find((m) => m.module === 'target')?.findings ?? [];
+    expect(findings.map((f) => f.code)).toEqual(['TARGET_PRIVATE_ADDRESS']);
+    expect(findings[0]).toMatchObject({ severity: 'error', details: { hostname: 'internal.test', address: '127.0.0.1' } });
+    expect(findings[0].suggestion).toMatch(/--allow-private/);
+    expect(hits).toEqual([]);
+  });
+
+  it('audits it with allowPrivate', async () => {
+    const report = await runAudit(`http://internal.test:${port}/`, { timeout: 3000, allowPrivate: true, only: ['metadata'] });
+
+    expect(report.page.status).toBe(200);
+    expect(hits).toContain('GET /');
+  });
+});

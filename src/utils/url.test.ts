@@ -221,6 +221,15 @@ describe('isPrivateAddress', () => {
     'http://255.255.255.255/',
     'http://224.0.0.1/',
     'http://0.1.2.3/',
+    'http://192.0.0.192/',
+    'http://192.0.0.1/',
+    'http://168.63.129.16/',
+    'http://[ff02::1]/',
+    'http://[ff05::fb]/',
+    // Teredo: server 65.54.227.120 (public), client 127.0.0.1 obfuscated as 80ff:fffe
+    'http://[2001:0:4136:e378:8000:63bf:80ff:fffe]/',
+    // Teredo: server 10.0.0.1 (private), client 8.8.8.8 obfuscated as f7f7:f7f7
+    'http://[2001:0:a00:1:8000:63bf:f7f7:f7f7]/',
   ])('flags %s', (url) => {
     expect(isPrivateAddress(host(url))).toBe(true);
   });
@@ -236,10 +245,14 @@ describe('isPrivateAddress', () => {
     'http://[::ffff:8.8.8.8]/',
     'http://[64:ff9b::808:808]/',
     'http://[2002:808:808::1]/',
-    'http://[2001:db8::1]/',
     'http://198.17.0.1/',
     'http://198.20.0.1/',
     'http://223.255.255.255/',
+    'http://192.0.1.1/',
+    'http://168.63.129.17/',
+    // Teredo with a public server (65.54.227.120) and a public client (8.8.8.8)
+    'http://[2001:0:4136:e378:8000:63bf:f7f7:f7f7]/',
+    'http://[2001:db8::1]/',
     'http://10.example.com/',
   ])('leaves %s alone', (url) => {
     expect(isPrivateAddress(host(url))).toBe(false);

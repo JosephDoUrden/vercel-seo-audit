@@ -24,9 +24,12 @@ export function responseTooLarge(
   const declared = Number.parseInt(headers.get('content-length') ?? '', 10);
   const sitemap = kind === 'sitemap';
   const limit = sitemap ? MAX_SITEMAP_BYTES : htmlLimit;
+  // A cap the caller lowered says nothing about the site: the page may be well under
+  // Googlebot's 2 MB.
+  const callers = !sitemap && htmlLimit < MAX_HTML_BYTES;
   return {
     code: 'RESPONSE_TOO_LARGE',
-    severity: 'warning',
+    severity: callers ? 'info' : 'warning',
     category,
     ...(sitemap
       ? {
@@ -38,8 +41,12 @@ export function responseTooLarge(
       : {
           // https://developers.google.com/search/docs/crawling-indexing/googlebot (updated 03 Feb 2026)
           message: `Page is larger than ${size(limit)} and was cut there: ${url}`,
-          explanation: `Googlebot reads only the first 2 MB of an HTML file and indexes what came before the cut-off. Only the first ${size(limit)} were read here, so the checks saw part of the page.`,
-          suggestion: 'Make the HTML smaller: move inline data, styles and scripts out of the page, and paginate long lists.',
+          explanation: callers
+            ? `Only the first ${size(limit)} were read, a cap set by the caller below the default ${size(MAX_HTML_BYTES)}, so the checks saw part of the page. This is not a problem with the site by itself: Googlebot reads the first 2 MB of an HTML file.`
+            : `Googlebot reads only the first 2 MB of an HTML file and indexes what came before the cut-off. Only the first ${size(limit)} were read here, so the checks saw part of the page.`,
+          suggestion: callers
+            ? 'Raise maxHtmlBytes to audit the whole page.'
+            : 'Make the HTML smaller: move inline data, styles and scripts out of the page, and paginate long lists.',
         }),
     details: { bytes: Number.isNaN(declared) ? null : declared, limit },
     url,

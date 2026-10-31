@@ -73,7 +73,8 @@ interface View {
 const text = (v: string | undefined | null): string | null => v?.replace(/\s+/g, ' ').trim() || null;
 
 // The fields a view compares, read in one streaming pass that keeps no document: the first
-// <title>'s text, the href of the first <link rel="canonical">, the content of the first
+// <title>'s text, the href of the first <link rel="canonical"> (rel in any case, as in the
+// selector), the content of the first
 // <meta name="robots"> and whether there is an <h1>, as the cheerio selectors would pick them.
 // Every view goes through it, the audited page as well, so two views never differ because
 // two parsers did. A full parse per probe cost hundreds of megabytes on a 10 MiB page, and a
@@ -86,12 +87,17 @@ function scan(body: string): { title: string | null; canonical: string | null; r
   let canonicalSeen = false;
   let robotsSeen = false;
   let h1 = false;
+  // cheerio parses with scripting on, so what sits inside <noscript> is text, not tags.
+  let noscript = false;
   const parser = new Parser({
     onopentag(name, attrs) {
-      if (name === 'title' && title === undefined) {
+      if (noscript) return;
+      if (name === 'noscript') {
+        noscript = true;
+      } else if (name === 'title' && title === undefined) {
         titleOpen = true;
         title = '';
-      } else if (name === 'link' && !canonicalSeen && attrs.rel === 'canonical') {
+      } else if (name === 'link' && !canonicalSeen && attrs.rel?.toLowerCase() === 'canonical') {
         canonicalSeen = true;
         canonical = attrs.href;
       } else if (name === 'meta' && !robotsSeen && attrs.name === 'robots') {
@@ -106,6 +112,7 @@ function scan(body: string): { title: string | null; canonical: string | null; r
     },
     onclosetag(name) {
       if (name === 'title') titleOpen = false;
+      else if (name === 'noscript') noscript = false;
     },
   });
   parser.end(body);
@@ -133,6 +140,7 @@ async function probe(url: string, userAgent: string, ctx: AuditContext): Promise
       auditedUrl: ctx.fetchOptions.auditedUrl,
       signal: ctx.fetchOptions.signal,
       maxBytes: ctx.fetchOptions.maxBytes,
+      allowPrivate: ctx.fetchOptions.allowPrivate,
     });
   } catch {
     return undefined;

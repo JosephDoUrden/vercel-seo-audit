@@ -427,7 +427,7 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
     // requested from a public site (see reachesPrivateAddress).
     try {
       const absoluteOgImage = ogImage.startsWith('http') ? ogImage : new URL(ogImage, finalUrl).href;
-      const status = reachesPrivateAddress(absoluteOgImage, normalizedUrl)
+      const status = !fetchOptions.allowPrivate && reachesPrivateAddress(absoluteOgImage, normalizedUrl)
         ? undefined
         : (await fetchHead(absoluteOgImage, fetchOptions)).status;
       if (status !== undefined && (status < 200 || status >= 300)) {
@@ -492,7 +492,7 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
     // 9a. Verify twitter:image URL returns 2xx
     try {
       const absoluteTwitterImage = twitterImage.startsWith('http') ? twitterImage : new URL(twitterImage, finalUrl).href;
-      const status = reachesPrivateAddress(absoluteTwitterImage, normalizedUrl)
+      const status = !fetchOptions.allowPrivate && reachesPrivateAddress(absoluteTwitterImage, normalizedUrl)
         ? undefined
         : (await fetchHead(absoluteTwitterImage, fetchOptions)).status;
       if (status !== undefined && (status < 200 || status >= 300)) {

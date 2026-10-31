@@ -3,10 +3,10 @@ import { runAudit, phases } from './runner.js';
 import { MODULE_IDS, MODULE_PACKS } from './types.js';
 import { buildAgentReport } from './utils/agent-format.js';
 
-vi.mock('./utils/http.js', async (importOriginal) => ({
-  RedirectError: (await importOriginal<typeof import('./utils/http.js')>()).RedirectError,
-  fetchPage: vi.fn(),
-}));
+vi.mock('./utils/http.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./utils/http.js')>();
+  return { RedirectError: real.RedirectError, PrivateAddressError: real.PrivateAddressError, fetchPage: vi.fn() };
+});
 
 vi.mock('./audit/index.js', () => ({
   auditRedirects: vi.fn(),

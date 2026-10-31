@@ -38,8 +38,9 @@ program
   .option('--apply', 'Write suggested fixes to disk (requires --fix)')
   .option('--ignore <codes>', 'Comma-separated issue codes to ignore, repeatable (e.g. ROBOTS_MISSING,FAVICON_MISSING)', (value: string, previous: string[]) => [...previous, value], [] as string[])
   .option('--only <modules>', 'Comma-separated audit modules to run, repeatable; their dependencies are added (e.g. vercel,streamedMetadata)', (value: string, previous: string[]) => [...previous, value], [] as string[])
+  .option('--allow-private', 'Allow private addresses for this run, for a site on a private DNS name; its links may then reach private hosts too')
   .option('--skip-pack <packs>', 'Comma-separated module packs to leave out, repeatable: vercel, nextjs', (value: string, previous: string[]) => [...previous, value], [] as string[])
-  .action(async (urlArg: string | undefined, options: { json?: boolean; format?: string; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[]; only: string[]; skipPack: string[] }) => {
+  .action(async (urlArg: string | undefined, options: { json?: boolean; format?: string; verbose?: boolean; strict?: boolean; timeout: string; pages?: string; userAgent?: string; report?: string; crawl?: boolean | string; diff?: string; fix?: boolean; apply?: boolean; ignore: string[]; only: string[]; skipPack: string[]; allowPrivate?: boolean }) => {
     // Load config file
     let config;
     try {
@@ -178,11 +179,12 @@ program
         ignore,
         only,
         skipPacks,
+        allowPrivate: options.allowPrivate ?? config?.allowPrivate,
       });
 
       // Exit code based on findings; 2 when the page could not be fetched at all
       const unreachable = auditReport.modules.some(
-        (m) => m.module === 'target' && m.findings.some((f) => f.code === 'TARGET_UNREACHABLE'),
+        (m) => m.module === 'target' && m.findings.some((f) => f.code === 'TARGET_UNREACHABLE' || f.code === 'TARGET_PRIVATE_ADDRESS'),
       );
       const code = getExitCode(auditReport.summary, strict ?? false, !unreachable);
 

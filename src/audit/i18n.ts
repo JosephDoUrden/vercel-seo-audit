@@ -138,7 +138,7 @@ export async function auditI18n(ctx: AuditContext): Promise<AuditFinding[]> {
       link.hreflang !== 'x-default' &&
       normalizeForComparison(link.href) !== currentNormalized &&
       // Alternates may live on other hosts, but never on a private address.
-      !reachesPrivateAddress(link.href, normalizedUrl),
+      (fetchOptions.allowPrivate || !reachesPrivateAddress(link.href, normalizedUrl)),
   );
 
   const toCheck = alternates.slice(0, MAX_RECIPROCAL_CHECKS);

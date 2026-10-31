@@ -147,6 +147,11 @@ describe('validateConfig', () => {
     expect(() => validateConfig({ only: [] })).toThrow('Error in .seoauditrc.json: "only" must list at least one module');
   });
 
+  it('accepts allowPrivate as a boolean and nothing else', () => {
+    expect(validateConfig({ allowPrivate: true }).allowPrivate).toBe(true);
+    expect(() => validateConfig({ allowPrivate: 'yes' })).toThrow('Error in .seoauditrc.json: "allowPrivate" must be a boolean');
+  });
+
   it('accepts skipPacks as an array of strings', () => {
     expect(validateConfig({ skipPacks: ['vercel'] }).skipPacks).toEqual(['vercel']);
   });
