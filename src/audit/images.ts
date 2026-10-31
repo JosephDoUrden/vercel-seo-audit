@@ -104,7 +104,7 @@ export async function auditImages(ctx: AuditContext): Promise<AuditFinding[]> {
   // 5. Large file sizes (HEAD requests, max 5)
   const absoluteImages = images
     .filter((img) => img.src.startsWith('http://') || img.src.startsWith('https://'))
-    .filter((img) => !reachesPrivateAddress(img.src, ctx.normalizedUrl))
+    .filter((img) => ctx.fetchOptions.allowPrivate || !reachesPrivateAddress(img.src, ctx.normalizedUrl))
     .slice(0, MAX_HEAD_REQUESTS);
 
   const largeFiles: { src: string; size: number }[] = [];

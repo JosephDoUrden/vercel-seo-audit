@@ -1,5 +1,5 @@
 import type { AuditContext, AuditFinding } from '../types.js';
-import { AI_CRAWLERS, DEFAULT_PATHS, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
+import { AI_CRAWLERS, DEFAULT_PATHS, MAX_HTML_BYTES, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
 import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
 import type * as cheerio from 'cheerio';
 import { parseHtml } from '../utils/html-parser.js';
@@ -85,7 +85,9 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
 
   let robotsTxt: string | undefined;
   try {
-    const res = await fetchPage(robotsUrl, ctx.fetchOptions);
+    // Read at the default cap whatever maxHtmlBytes says, so ROBOTS_TOO_LARGE still sees the
+    // whole file; a lowered page cap would cut it without a word.
+    const res = await fetchPage(robotsUrl, { ...ctx.fetchOptions, maxBytes: MAX_HTML_BYTES });
     const challenge = detectChallenge(res.headers, res.status);
     if (res.status === 200) {
       robotsTxt = res.body;

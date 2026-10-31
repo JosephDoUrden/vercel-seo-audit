@@ -1,6 +1,9 @@
+import dns, { type LookupAddress } from 'node:dns';
+import type { LookupFunction } from 'node:net';
+import { Agent } from 'undici';
 import { DEFAULT_TIMEOUT, MAX_HTML_BYTES, MAX_REDIRECTS, USER_AGENT } from '../constants.js';
 import type { FetchOptions, RedirectChain, RedirectHop } from '../types.js';
-import { reachesPrivateAddress } from './url.js';
+import { isPrivateAddress, reachesPrivateAddress } from './url.js';
 
 function buildHeaders(userAgent?: string): Record<string, string> {
   return {
@@ -96,8 +99,133 @@ function auditedFrom(url: string, opts?: FetchOptions): string {
   return opts?.auditedUrl ?? url;
 }
 
-function refused(url: string): Error {
-  return new Error(`Refused to fetch the private address ${new URL(url).hostname}`);
+// True when `url` is a private address the call may not reach: see reachesPrivateAddress,
+// and `allowPrivate`, which turns the guard off.
+function blocked(url: string, from: string, opts?: FetchOptions): boolean {
+  return !opts?.allowPrivate && reachesPrivateAddress(url, from);
+}
+
+/**
+ * A request refused because it would reach a private address (see isPrivateAddress)
+ * from a public audit: a literal one in the URL, or one the name resolved to when
+ * the connection was made. `address` is the resolved address, when there was one.
+ */
+export class PrivateAddressError extends Error {
+  constructor(
+    message: string,
+    readonly hostname: string,
+    readonly address?: string,
+  ) {
+    super(message);
+    this.name = 'PrivateAddressError';
+  }
+}
+
+function refused(url: string): PrivateAddressError {
+  const { hostname } = new URL(url);
+  return new PrivateAddressError(`Refused to fetch the private address ${hostname}`, hostname);
+}
+
+function refusedRedirect(url: string): PrivateAddressError {
+  const { hostname } = new URL(url);
+  return new PrivateAddressError(`Refused to follow a redirect to the private address ${hostname}`, hostname);
+}
+
+/**
+ * A `lookup` for net.connect that refuses a name when any address it resolves to
+ * is private. Every answer is checked, not only the one connected to, and a lookup
+ * that fails or throws is an error, so a name never connects without passing.
+ * Because it runs for each new connection, a name that resolves to a public
+ * address for one request and a private one for the next is caught as well.
+ */
+export const guardedLookup: LookupFunction = (hostname, options, callback) => {
+  // An error carries no address, as with dns.lookup itself.
+  const fail = callback as (err: NodeJS.ErrnoException) => void;
+  const done = (addresses: LookupAddress[]): void => {
+    const blocked = addresses.find((a) => isPrivateAddress(a.address));
+    if (blocked) {
+      fail(
+        new PrivateAddressError(
+          `Refused to connect to ${hostname}: ${hostname} resolves to the private address ${blocked.address}`,
+          hostname,
+          blocked.address,
+        ),
+      );
+    } else if (addresses.length === 0) {
+      fail(Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), { code: 'ENOTFOUND' }));
+    } else if (options.all) {
+      callback(null, addresses);
+    } else {
+      callback(null, addresses[0].address, addresses[0].family);
+    }
+  };
+  try {
+    dns.lookup(hostname, { all: true, verbatim: true, family: options.family }, (err, addresses) => {
+      if (err) fail(err);
+      else done(addresses);
+    });
+  } catch (err) {
+    fail(err as NodeJS.ErrnoException);
+  }
+};
+
+// One pool for every public audit in the process; its connections pass through
+// guardedLookup. A literal IP never reaches a lookup, which is why the URL checks
+// in this file stay in front of it.
+let guardedAgent: Agent | undefined;
+
+// The proxy a caller installed with setGlobalDispatcher, by class name so it is found
+// whichever copy of undici made it. The guarded Agent connects directly, so it would
+// skip the proxy without a word.
+function globalProxy(): string | undefined {
+  const dispatcher = (globalThis as Record<symbol, unknown>)[Symbol.for('undici.globalDispatcher.1')];
+  const name = (dispatcher as { constructor?: { name?: string } } | undefined)?.constructor?.name;
+  return name === 'ProxyAgent' || name === 'EnvHttpProxyAgent' ? name : undefined;
+}
+
+// The dispatcher for a request in this call: the guarded one unless the audited URL
+// is itself on a private host, whose audit may follow its own links anywhere, or the
+// caller turned the guard off.
+function dispatcherFor(url: string, opts?: FetchOptions): Agent | undefined {
+  if (opts?.allowPrivate) return undefined;
+  let local = false;
+  try {
+    local = isPrivateAddress(new URL(auditedFrom(url, opts)).hostname);
+  } catch {
+    // An audited URL that will not parse gets the guard.
+  }
+  if (local) return undefined;
+  const proxy = globalProxy();
+  if (proxy) {
+    throw new Error(
+      `A ${proxy} is set as the global dispatcher. The private-address guard connects directly and would bypass it, so the request was not made. Pass allowPrivate (--allow-private) to send requests through the proxy without the guard.`,
+    );
+  }
+  guardedAgent ??= new Agent({ connect: { lookup: guardedLookup } });
+  return guardedAgent;
+}
+
+// fetch wraps a connect failure as `TypeError: fetch failed`; a refusal is
+// handed on as itself so callers and reports see why.
+function unwrapRefusal(err: unknown): unknown {
+  return err instanceof Error && err.cause instanceof PrivateAddressError ? err.cause : err;
+}
+
+// Every request in this file goes through here: manual redirects, so each hop
+// is checked before it is requested, and the dispatcher that checks each name
+// when it connects.
+async function request(url: string, init: RequestInit, opts: FetchOptions | undefined): Promise<Response> {
+  const dispatcher = dispatcherFor(url, opts);
+  try {
+    return await fetch(url, {
+      ...init,
+      redirect: 'manual',
+      headers: buildHeaders(opts?.userAgent),
+      ...(dispatcher && { dispatcher }),
+    } as RequestInit);
+  } catch (err) {
+    throw unwrapRefusal(err);
+  }
 }
 
 // The controller behind each hop response, kept so a body read that times out
@@ -112,11 +240,7 @@ function fetchHop(url: string, opts: FetchOptions | undefined, deadline: number)
     const unfollow = follow(controller, opts);
 
     try {
-      const res = await fetch(url, {
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: buildHeaders(opts?.userAgent),
-      });
+      const res = await request(url, { signal: controller.signal }, opts);
       hopControllers.set(res, controller);
       return res;
     } finally {
@@ -146,7 +270,7 @@ async function walkRedirects(
   const from = auditedFrom(url, opts);
   let current = url;
 
-  if (reachesPrivateAddress(url, from)) {
+  if (blocked(url, from, opts)) {
     return { chain: { hops, finalUrl: url, isCircular: false }, error: refused(url) };
   }
 
@@ -170,8 +294,8 @@ async function walkRedirects(
     if (location && status >= 300 && status < 400) {
       const resolved = new URL(location, current).href;
       hops.push({ url: current, status, location: resolved });
-      if (reachesPrivateAddress(resolved, from)) {
-        const error = new Error(`Refused to follow a redirect to the private address ${new URL(resolved).hostname}`);
+      if (blocked(resolved, from, opts)) {
+        const error = refusedRedirect(resolved);
         return { chain: { hops, finalUrl: resolved, isCircular: false }, error };
       }
       current = resolved;
@@ -257,11 +381,7 @@ async function fetchFollowing(url: string, opts: FetchOptions | undefined, deadl
   try {
     // Manual, like every request here: native redirects would skip the
     // private-address check.
-    const res = await fetch(url, {
-      redirect: 'manual',
-      signal: controller.signal,
-      headers: buildHeaders(opts?.userAgent),
-    });
+    const res = await request(url, { signal: controller.signal }, opts);
 
     // Headers are in: retire the header timer and read the body against what
     // is left of the deadline, so a stall here reports the same error as the
@@ -320,24 +440,17 @@ export function fetchHead(
     // checked before it is requested.
     try {
       const from = auditedFrom(url, opts);
-      if (reachesPrivateAddress(url, from)) throw refused(url);
+      if (blocked(url, from, opts)) throw refused(url);
       let current = url;
       for (let i = 0; ; i++) {
         throwIfAborted(opts);
-        const res = await fetch(current, {
-          method: 'HEAD',
-          redirect: 'manual',
-          signal: controller.signal,
-          headers: buildHeaders(opts?.userAgent),
-        });
+        const res = await request(current, { method: 'HEAD', signal: controller.signal }, opts);
         const location = res.headers.get('location');
         if (!location || res.status < 300 || res.status >= 400 || i >= MAX_REDIRECTS) {
           return { status: res.status, headers: res.headers };
         }
         const next = new URL(location, current).href;
-        if (reachesPrivateAddress(next, from)) {
-          throw new Error(`Refused to follow a redirect to the private address ${new URL(next).hostname}`);
-        }
+        if (blocked(next, from, opts)) throw refusedRedirect(next);
         current = next;
       }
     } finally {

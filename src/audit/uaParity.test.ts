@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as cheerio from 'cheerio';
 import type { AuditContext, FetchOptions } from '../types.js';
 import { USER_AGENT_PRESETS } from '../constants.js';
 import { BOT_PROBE_USER_AGENT } from './streamed-metadata.js';
@@ -128,6 +129,47 @@ describe('auditUaParity', () => {
     expect(f.details?.fields).toEqual(['title']);
     expect(f.details?.byUserAgent).toMatchObject({ default: { title: 'Example' }, htmlLimitedBot: { title: null } });
     expect(f.explanation).toContain('cloaking');
+  });
+
+  it('reads each field the way the cheerio selectors pick it', async () => {
+    const tricky =
+      '<html><head><script>document.write("<title>Fake</title><h1>no</h1>")</script>' +
+      '<TITLE>A &amp; B</TITLE><title>Second</title>' +
+      '<link rel="canonical"><link rel="canonical" href="https://example.com/other">' +
+      '<meta name="Robots" content="noindex"><meta name="robots" content=" index ">' +
+      '</head><body><p>no heading</p></body></html>';
+    const $ = cheerio.load(tricky);
+    answer({ [GOOGLEBOT]: page(tricky) });
+
+    const findings = await auditUaParity(makeCtx());
+    const googlebot = findings.find((f) => f.code === 'UA_METADATA_DIFFERS')?.details?.byUserAgent as Record<string, Record<string, unknown>>;
+
+    expect(googlebot.googlebot).toMatchObject({
+      title: $('title').first().text(),
+      canonical: $('link[rel="canonical"]').first().attr('href') ?? null,
+      robots: $('meta[name="robots"]').first().attr('content')?.trim(),
+    });
+    expect(googlebot.googlebot).toMatchObject({ title: 'A & B', canonical: null, robots: 'index' });
+  });
+
+  it('matches rel case-insensitively and skips what sits inside <noscript>, as cheerio does', async () => {
+    const tricky =
+      '<html><head><noscript><title>Hidden</title><link rel="canonical" href="https://example.com/hidden">' +
+      '<meta name="robots" content="noindex"></noscript>' +
+      '<title>Example</title><link rel="Canonical" href="https://example.com/"></head>' +
+      '<body><noscript><h1>Hidden</h1></noscript><p>x</p></body></html>';
+    const $ = cheerio.load(tricky);
+    answer({ [GOOGLEBOT]: page(tricky) });
+
+    const findings = await auditUaParity(makeCtx());
+    const metadata = findings.find((f) => f.code === 'UA_METADATA_DIFFERS');
+
+    expect($('title').first().text()).toBe('Example');
+    expect($('link[rel="canonical"]').first().attr('href')).toBe('https://example.com/');
+    expect($('meta[name="robots"]').length).toBe(0);
+    expect($('h1').length).toBe(0);
+    // Title, canonical and robots all agree with the default page, which has an <h1>.
+    expect(metadata).toBeUndefined();
   });
 
   it('ignores case, whitespace and a trailing slash on the canonical', async () => {

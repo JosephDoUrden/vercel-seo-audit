@@ -12,7 +12,7 @@ import type {
 } from './types.js';
 import { MODULE_IDS } from './types.js';
 import { normalizeUrl } from './utils/url.js';
-import { fetchPage, RedirectError } from './utils/http.js';
+import { fetchPage, PrivateAddressError, RedirectError } from './utils/http.js';
 import { isNextjsPage } from './utils/nextjs.js';
 import { responseTooLarge } from './utils/tooLarge.js';
 import { detectChallenge } from './utils/challenge.js';
@@ -190,6 +190,22 @@ function unreachable(url: string, error: string): AuditFinding {
   };
 }
 
+function privateAddress(url: string, err: PrivateAddressError): AuditFinding {
+  const where = err.address ? `resolves to the private address ${err.address}` : 'is a private address';
+  return {
+    code: 'TARGET_PRIVATE_ADDRESS',
+    severity: 'error',
+    category: 'indexing',
+    message: `Refused to audit ${url}: ${err.hostname} ${where}`,
+    explanation:
+      'A public audit never connects to a private address, so a site cannot point it at internal services. Only a literal private address or localhost in the audited URL counts as a local audit, so a private DNS name is refused like any other.',
+    suggestion:
+      'Audit it by localhost or its IP address, or pass --allow-private (allowPrivate in .seoauditrc.json or runAudit) to turn the guard off for this run. That also lets the site\'s redirects, sitemaps and links reach private hosts, so use it only for a site you trust.',
+    details: { hostname: err.hostname, address: err.address ?? null },
+    url,
+  };
+}
+
 function httpError(url: string, status: number, finalUrl: string): AuditFinding {
   return {
     code: 'TARGET_HTTP_ERROR',
@@ -240,6 +256,19 @@ export interface RunAuditOptions {
    */
   skipPacks?: readonly ModulePack[];
   /**
+   * Bytes of each HTML page, robots.txt and other non-sitemap response to read before
+   * cutting it, reported as RESPONSE_TOO_LARGE. MAX_HTML_BYTES (10 MiB) when unset;
+   * sitemaps keep their own 50 MB cap. Memory grows with the page, so a server that
+   * audits pages it does not control may want it lower.
+   */
+  maxHtmlBytes?: number;
+  /**
+   * Turns the private-address guard off for this run, for a site on a private DNS name
+   * (`http://intranet.example/`). The site's redirects, sitemaps and links may then reach
+   * any private host too, so only set it for a site you trust.
+   */
+  allowPrivate?: boolean;
+  /**
    * Cancels the audit. Every request in flight is aborted, no new one starts, and
    * `runAudit` rejects with an error named `AbortError` instead of returning a
    * partial report.
@@ -265,8 +294,8 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 /**
  * Audits one URL and returns the full report. Every request it makes, the page's
  * redirects, sitemap URLs and crawled links included, is refused when it points at
- * a private address and `url` does not, so a caller passing user input gets the same
- * guard as the CLI.
+ * a private address, or at a name that resolves to one, and `url` is not on a private
+ * host, so a caller passing user input gets the same guard as the CLI.
  * With `opts.signal`, it rejects as soon as the signal fires.
  */
 export async function runAudit(url: string, opts: RunAuditOptions = {}): Promise<AuditReport> {
@@ -296,6 +325,10 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
   const { signal } = opts;
   const start = Date.now();
   const normalized = normalizeUrl(url);
+  const { maxHtmlBytes } = opts;
+  if (maxHtmlBytes !== undefined && !(Number.isSafeInteger(maxHtmlBytes) && maxHtmlBytes > 0)) {
+    throw new RangeError(`maxHtmlBytes must be a positive whole number of bytes, got ${maxHtmlBytes}`);
+  }
 
   const fetchOptions: FetchOptions = {
     timeout: opts.timeout,
@@ -303,6 +336,8 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
     cache: new Map(),
     auditedUrl: normalized,
     signal,
+    ...(maxHtmlBytes !== undefined && { maxBytes: maxHtmlBytes }),
+    ...(opts.allowPrivate && { allowPrivate: true }),
   };
 
   const ctx: AuditContext = {
@@ -329,7 +364,7 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
     pageFacts.status = page.status;
     pageFacts.finalUrl = page.finalUrl;
     pageFacts.nextjs = isNextjsPage(Object.fromEntries(page.headers.entries()), page.body);
-    if (page.truncated) targetFindings.push(responseTooLarge(normalized, 'performance', page.headers));
+    if (page.truncated) targetFindings.push(responseTooLarge(normalized, 'performance', page.headers, 'html', maxHtmlBytes));
     if (page.status >= 200 && page.status < 300) {
       const contentType = page.headers.get('content-type');
       isHtml = isHtmlType(contentType) && page.body.trim() !== '';
@@ -349,6 +384,11 @@ async function audit(url: string, opts: RunAuditOptions): Promise<AuditReport> {
     // A redirect loop or a chain past MAX_REDIRECTS is the site answering; the
     // redirects module reports it, and the HTML modules find no page.
     if (err instanceof RedirectError) reached = true;
+    // The audited host itself: a private DNS name. A public site redirecting into a
+    // private network is the site's doing, and stays TARGET_UNREACHABLE.
+    else if (err instanceof PrivateAddressError && err.hostname === new URL(normalized).hostname) {
+      targetFindings.push(privateAddress(normalized, err));
+    }
     else targetFindings.push(unreachable(normalized, describeError(err)));
   }
 

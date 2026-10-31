@@ -10,6 +10,7 @@ export interface SeoAuditConfig {
   only?: string[];
   skipPacks?: string[];
   format?: OutputFormat;
+  allowPrivate?: boolean;
 }
 
 /** `text` is the human report; `agent` is the compact JSON contract for coding agents. */
@@ -45,6 +46,7 @@ export const ISSUE_CODES = [
   'TARGET_REDIRECTED',
   // Target issues: the audited page itself
   'TARGET_UNREACHABLE',
+  'TARGET_PRIVATE_ADDRESS',
   'TARGET_HTTP_ERROR',
   'TARGET_NOT_HTML',
   // An audit module that threw instead of returning findings
@@ -210,6 +212,7 @@ export const ISSUE_DESCRIPTIONS: Record<IssueCode, string> = {
   COMMON_PAGE_REDIRECT: 'One of the common paths or the --pages paths goes through a chain of redirects before it answers.',
   TARGET_REDIRECTED: 'The audited URL redirects to a different host or path, so the page checks describe the destination rather than the URL given.',
   TARGET_UNREACHABLE: 'The audited URL could not be fetched at all (DNS, TLS, connection or timeout), so nothing else was audited.',
+  TARGET_PRIVATE_ADDRESS: 'The audited host name resolves to a private address, which the audit refuses to reach unless private addresses are allowed for the run.',
   TARGET_HTTP_ERROR: 'The audited URL answered with a 4xx or 5xx status, and search engines drop such pages from the index.',
   TARGET_NOT_HTML: 'The audited URL did not return HTML, or returned an empty body, so the checks that read the page as HTML were skipped.',
   MODULE_FAILED: 'An audit module threw before it could report, so its checks are missing from the report.',
@@ -485,6 +488,8 @@ export interface FetchOptions {
   auditedUrl?: string;
   /** The caller's abort: no request starts once it fires, and every one in flight is torn down. */
   signal?: AbortSignal;
+  /** Turns the private-address guard off: any address may be reached, from any page. */
+  allowPrivate?: boolean;
 }
 
 export interface AuditContext {

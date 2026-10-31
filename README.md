@@ -26,6 +26,8 @@ npx vercel-seo-audit https://your-site.com
 
 ![vercel-seo-audit running against a live site, with the redirect, sitemap, structured data and streamed-metadata modules](./docs/demo.gif)
 
+Needs Node.js 20.18.1 or later.
+
 Install globally (optional):
 
 ```bash
@@ -124,7 +126,7 @@ const exitCode = getExitCode(report.summary, false);
 console.log(formatAgent(report, { version: VERSION, exitCode }));
 ```
 
-`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`, `skipPacks`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
+`runAudit` takes the CLI's options (`timeout`, `pages`, `userAgent`, `crawl`, `ignore`, `only`, `skipPacks`, `allowPrivate`) and `signal`, and returns the full report that `--json` prints. It applies the same private-address guard as the CLI: when the audited URL is public, no redirect, sitemap entry or crawled link can send a request to localhost, a private range or a cloud metadata address, whether written as an address or as a name that resolves to one. Pass `maxHtmlBytes` to read less of each page than the default 10 MiB (sitemaps keep their 50 MB cap); memory grows with the page, so a service auditing pages it does not control may want it lower. Pass `signal` to cancel an audit: every request in flight is aborted, no new one starts, and `runAudit` rejects with an error named `AbortError` rather than returning a partial report.
 
 ```ts
 const controller = new AbortController();
@@ -293,6 +295,8 @@ The page is fetched once before any module runs.
 
 * Not reachable at all (DNS, TLS, refused connection, timeout): one `TARGET_UNREACHABLE` error
   with the underlying message in `details.error`. No module runs, and the CLI exits with `2`.
+  A host name that resolves to a private address gets `TARGET_PRIVATE_ADDRESS` instead (error,
+  `details.hostname` and `details.address`), with the same exit code
   A redirect loop, or more than 20 redirects, is not that: the modules run and `redirects`
   reports it
 * A 4xx or 5xx status: `TARGET_HTTP_ERROR` (error, `details.status`). The modules still run.
@@ -355,10 +359,22 @@ The page is fetched once before any module runs.
 
 Wherever the audit follows a URL it did not get from you (redirect hops, child sitemaps,
 crawled pages, `og:image` / `twitter:image` / `<img>` probes, hreflang alternates), it refuses
-literal loopback, private, link-local and cloud-metadata addresses such as `169.254.169.254`,
-unless the audited URL is itself on one (auditing `http://localhost:3000` still works). Only
-literal addresses are checked: no DNS lookup is made, so a public name that resolves to a
-private address is not caught.
+loopback, private, link-local, reserved and cloud-metadata addresses such as `169.254.169.254`,
+IPv6 forms that carry one included, unless the audited URL is itself on one (auditing
+`http://localhost:3000` still works). A literal address is refused before any request. A name
+is checked when the connection is made: if any address it resolves to is private the request
+fails, and a lookup that fails is an error too, so a name that resolves differently from one
+request to the next is caught as well. Because only a literal private host or `localhost`
+counts as a local audit, a site on a private DNS name (`http://intranet.example/`) is refused
+with `TARGET_PRIVATE_ADDRESS`; audit it by `localhost` or its address, or pass `--allow-private`
+(`"allowPrivate": true` in `.seoauditrc.json`, `allowPrivate` for `runAudit`). That turns the
+guard off for the whole run: the site's redirects, sitemaps and links can then reach any private
+host as well, so use it only for a site you trust.
+
+The guard connects through its own undici `Agent`, so a proxy installed with
+`setGlobalDispatcher` (`ProxyAgent`, `EnvHttpProxyAgent`) would be bypassed. Rather than skip
+it silently, every request fails with an error saying so; with `--allow-private` the audit uses
+your dispatcher and its proxy, without the guard.
 
 ### Metadata
 
@@ -580,7 +596,7 @@ Exit codes:
 | `1`  | One or more errors found                                             |
 | `2`  | Crash, invalid input, or the audited page could not be fetched at all |
 
-On a `TARGET_UNREACHABLE` run the report is still printed (and `--json` is still valid JSON),
+On a `TARGET_UNREACHABLE` or `TARGET_PRIVATE_ADDRESS` run the report is still printed (and `--json` is still valid JSON),
 with that one finding; the exit code is `2` even when the code is ignored, since nothing was audited.
 
 ---
