@@ -1,6 +1,7 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { fetchPage, fetchHead } from '../utils/http.js';
 import {
+  type CanonicalLink,
   getCanonicalLinks,
   getNoindexDirective,
   getCharset,
@@ -52,6 +53,19 @@ export function canonicalsFromLinkHeader(value: string): string[] {
     if (target && rel.includes('canonical') && !ALTERNATE_PARAMS.some((p) => params.has(p))) canonicals.push(target);
   }
   return canonicals;
+}
+
+/**
+ * How many different URLs the <head> canonicals name, each resolved against base. The same URL
+ * written twice does not conflict, so more than one is a conflict.
+ */
+export function distinctCanonicalCount(headTags: readonly CanonicalLink[], base: string): number {
+  return new Set(headTags.map((t) => resolve(t.href, base) ?? t.href)).size;
+}
+
+/** 'fragment' or 'relative' for a canonical href Google advises against, otherwise undefined. */
+export function canonicalHrefKind(href: string): 'fragment' | 'relative' | undefined {
+  return href.includes('#') ? 'fragment' : /^[a-z][a-z\d+.-]*:/i.test(href) ? undefined : 'relative';
 }
 
 function resolve(href: string, base: string): string | undefined {
@@ -134,7 +148,7 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
   // 3a. Google, "JavaScript SEO basics" (updated 04 Mar 2026): "Conflicting or multiple
   // rel="canonical" link tags may lead to unexpected results." The same URL written twice
   // does not conflict, so only distinct URLs count.
-  if (new Set(headTags.map((t) => resolve(t.href, finalUrl) ?? t.href)).size > 1) {
+  if (distinctCanonicalCount(headTags, finalUrl) > 1) {
     findings.push({
       code: 'CANONICAL_MULTIPLE',
       severity: 'error',
@@ -197,7 +211,7 @@ export async function auditMetadata(ctx: AuditContext): Promise<AuditFinding[]> 
   // don't recommend them." And: "Don't specify a URL fragment as canonical, as Google generally
   // doesn't support URL fragments." The other checks use the href resolved against the page.
   if (canonical !== undefined && canonicalFull !== undefined) {
-    const kind = canonical.includes('#') ? 'fragment' : /^[a-z][a-z\d+.-]*:/i.test(canonical) ? undefined : 'relative';
+    const kind = canonicalHrefKind(canonical);
     if (kind) {
       findings.push({
         code: 'CANONICAL_RELATIVE',

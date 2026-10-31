@@ -37,6 +37,8 @@ function makePage(html: string, opts: { status?: number; headers?: Headers; fina
 const GOOD_HTML = `<html><head>
   <title>Test Page</title>
   <meta name="description" content="A test page">
+  <meta property="og:title" content="Test Page">
+  <meta property="og:image" content="https://example.com/og.png">
   <link rel="canonical" href="https://example.com/page-1">
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage"}</script>
 </head><body></body></html>`;
@@ -91,6 +93,8 @@ function makeGoodHtml(pageUrl: string): string {
   return `<html><head>
   <title>Test Page</title>
   <meta name="description" content="A test page">
+  <meta property="og:title" content="Test Page">
+  <meta property="og:image" content="https://example.com/og.png">
   <link rel="canonical" href="${pageUrl}">
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage"}</script>
 </head><body></body></html>`;
@@ -151,7 +155,7 @@ describe('auditCrawl', () => {
   });
 
   it('detects noindex via meta name="robots"', async () => {
-    const html = '<html><head><meta name="robots" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><meta name="robots" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
     const findings = await auditCrawl(ctx);
@@ -161,7 +165,7 @@ describe('auditCrawl', () => {
   });
 
   it('detects noindex via an upper-case meta name="ROBOTS"', async () => {
-    const html = '<html><head><meta name="ROBOTS" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><meta name="ROBOTS" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
     const findings = await auditCrawl(ctx);
@@ -169,7 +173,7 @@ describe('auditCrawl', () => {
   });
 
   it('detects noindex via meta name="googlebot"', async () => {
-    const html = '<html><head><meta name="googlebot" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><meta name="googlebot" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
     const findings = await auditCrawl(ctx);
@@ -187,7 +191,7 @@ describe('auditCrawl', () => {
   });
 
   it('reports two CRAWL_PAGE_NOINDEX when both meta and header have noindex', async () => {
-    const html = '<html><head><meta name="robots" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><meta name="robots" content="noindex"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
     const headers = new Headers({ 'x-robots-tag': 'noindex' });
     mockFetchPage.mockResolvedValue(makePage(html, { headers }));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
@@ -197,7 +201,7 @@ describe('auditCrawl', () => {
   });
 
   it('detects missing title only (other elements present)', async () => {
-    const html = '<html><head><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
     const findings = await auditCrawl(ctx);
@@ -207,7 +211,7 @@ describe('auditCrawl', () => {
   });
 
   it('detects missing description with correct severity', async () => {
-    const html = '<html><head><title>T</title><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><title>T</title><link rel="canonical" href="https://example.com/p"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
     const findings = await auditCrawl(ctx);
@@ -217,7 +221,7 @@ describe('auditCrawl', () => {
   });
 
   it('detects missing JSON-LD only with correct severity', async () => {
-    const html = '<html><head><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/p"></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/p'] });
     const findings = await auditCrawl(ctx);
@@ -229,7 +233,7 @@ describe('auditCrawl', () => {
   // --- Canonical checks ---
 
   it('detects canonical mismatch', async () => {
-    const html = '<html><head><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/other-page"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/other-page"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/page-1'] });
     const findings = await auditCrawl(ctx);
@@ -243,7 +247,7 @@ describe('auditCrawl', () => {
   });
 
   it('accepts canonical with trailing slash difference', async () => {
-    const html = '<html><head><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/page-1/"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><title>T</title><meta name="description" content="D"><link rel="canonical" href="https://example.com/page-1/"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/page-1'] });
     const findings = await auditCrawl(ctx);
@@ -252,7 +256,7 @@ describe('auditCrawl', () => {
   });
 
   it('resolves relative canonical URL against page URL', async () => {
-    const html = '<html><head><title>T</title><meta name="description" content="D"><link rel="canonical" href="/page-1"><script type="application/ld+json">{}</script></head><body></body></html>';
+    const html = '<html><head><meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png"><title>T</title><meta name="description" content="D"><link rel="canonical" href="/page-1"><script type="application/ld+json">{}</script></head><body></body></html>';
     mockFetchPage.mockResolvedValue(makePage(html));
     const ctx = makeCtx({ sitemapUrls: ['https://example.com/page-1'] });
     const findings = await auditCrawl(ctx);
@@ -464,5 +468,221 @@ describe('auditCrawl', () => {
     for (const url of urls) {
       expect(callOrder).toContain(url);
     }
+  });
+});
+
+// A page that passes every per-page check; parts can be swapped out per test.
+function page(
+  url: string,
+  opts: { title?: string; description?: string; canonical?: string; head?: string; body?: string } = {},
+): string {
+  const { title = `Title of ${url}`, description = `About ${url}`, canonical = url, head = '', body = '' } = opts;
+  return `<html><head>
+  <title>${title}</title>
+  <meta name="description" content="${description}">
+  <link rel="canonical" href="${canonical}">
+  <meta property="og:title" content="${title}">
+  <meta property="og:image" content="https://example.com/og.png">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage"}</script>
+  ${head}
+</head><body>${body}</body></html>`;
+}
+
+const A = 'https://example.com/a';
+const B = 'https://example.com/b';
+const C = 'https://example.com/c';
+
+async function crawl(pages: Record<string, string>) {
+  mockFetchPage.mockImplementation(async (url: string) => makePage(pages[url], { finalUrl: url }));
+  return auditCrawl(makeCtx({ sitemapUrls: Object.keys(pages) }));
+}
+
+describe('auditCrawl page checks and duplicate detection', () => {
+  it('reports nothing for a crawl of distinct, complete pages, with one GET per page', async () => {
+    const findings = await crawl({ [A]: page(A), [B]: page(B), [C]: page(C) });
+    expect(findings).toEqual([]);
+    expect(mockFetchPage).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports CRAWL_PAGE_HREFLANG_MISSING_SELF only on the page whose hreflang skips itself', async () => {
+    const alt = (href: string, lang: string) => `<link rel="alternate" hreflang="${lang}" href="${href}">`;
+    const findings = await crawl({
+      [A]: page(A, { head: alt(A, 'en') + alt(B, 'de') }),
+      [B]: page(B, { head: alt(A, 'en') + alt(C, 'fr') }),
+      [C]: page(C),
+    });
+    expect(findings.map((f) => [f.code, f.url])).toEqual([['CRAWL_PAGE_HREFLANG_MISSING_SELF', B]]);
+    expect(findings[0]).toMatchObject({ severity: 'warning', details: { hreflang: ['en', 'fr'] } });
+  });
+
+  it('reports CRAWL_PAGE_IMAGES_MISSING_ALT with the count, ignoring alt=""', async () => {
+    const findings = await crawl({
+      [A]: page(A, { body: '<img src="/1.png"><img src="/2.png"><img src="/3.png" alt="">' }),
+      [B]: page(B, { body: '<img src="/4.png" alt="Logo">' }),
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      code: 'CRAWL_PAGE_IMAGES_MISSING_ALT',
+      severity: 'warning',
+      url: A,
+      details: { count: 2, srcs: ['/1.png', '/2.png'] },
+    });
+  });
+
+  it('reports one CRAWL_PAGE_OG_MISSING per page naming what is missing', async () => {
+    const findings = await crawl({
+      [A]: page(A).replace(/<meta property="og:[^>]+>/g, ''),
+      [B]: page(B).replace(/<meta property="og:image"[^>]+>/, ''),
+      [C]: page(C),
+    });
+    expect(findings.map((f) => [f.code, f.url, f.details])).toEqual([
+      ['CRAWL_PAGE_OG_MISSING', A, { missing: ['og:title', 'og:image'] }],
+      ['CRAWL_PAGE_OG_MISSING', B, { missing: ['og:image'] }],
+    ]);
+  });
+
+  it('reports CRAWL_PAGE_METADATA_IN_BODY for tags in <body> alone, without a second request', async () => {
+    const streamed = `<html><head>
+  <meta property="og:title" content="T"><meta property="og:image" content="https://example.com/og.png">
+  <script type="application/ld+json">{}</script>
+</head><body><div>x</div><title>Streamed</title><meta name="description" content="D"><link rel="canonical" href="${B}"></body></html>`;
+    const findings = await crawl({ [A]: page(A), [B]: streamed });
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      code: 'CRAWL_PAGE_METADATA_IN_BODY',
+      severity: 'warning',
+      url: B,
+      details: { bodyOnly: ['title', 'description', 'canonical'] },
+    });
+    expect(findings[0].explanation).toContain('no second request');
+    expect(mockFetchPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports CRAWL_PAGE_CANONICAL_MULTIPLE only when the <head> canonicals differ', async () => {
+    const findings = await crawl({
+      [A]: page(A, { head: `<link rel="canonical" href="${B}">` }),
+      [B]: page(B, { head: `<link rel="canonical" href="${B}">` }),
+    });
+    const multiple = findings.filter((f) => f.code === 'CRAWL_PAGE_CANONICAL_MULTIPLE');
+    expect(multiple).toHaveLength(1);
+    expect(multiple[0]).toMatchObject({ severity: 'warning', url: A, details: { hrefs: [A, B] } });
+  });
+
+  it('reports CRAWL_PAGE_CANONICAL_RELATIVE for a relative and a fragment canonical', async () => {
+    const findings = await crawl({
+      [A]: page(A, { canonical: '/a' }),
+      [B]: page(B, { canonical: `${B}#top` }),
+      [C]: page(C),
+    });
+    const relative = findings.filter((f) => f.code === 'CRAWL_PAGE_CANONICAL_RELATIVE');
+    expect(relative.map((f) => [f.url, f.details])).toEqual([
+      [A, { href: '/a', kind: 'relative' }],
+      [B, { href: `${B}#top`, kind: 'fragment' }],
+    ]);
+    expect(relative.every((f) => f.severity === 'warning')).toBe(true);
+  });
+
+  it('reports CRAWL_DUPLICATE_TITLES once per shared title, with sorted URLs', async () => {
+    const findings = await crawl({
+      [C]: page(C, { title: 'Shared' }),
+      [A]: page(A, { title: 'Shared' }),
+      [B]: page(B),
+    });
+    expect(findings).toEqual([
+      expect.objectContaining({
+        code: 'CRAWL_DUPLICATE_TITLES',
+        severity: 'warning',
+        url: A,
+        details: { title: 'Shared', count: 2, urls: [A, C] },
+      }),
+    ]);
+  });
+
+  it('reports CRAWL_DUPLICATE_DESCRIPTIONS for pages sharing a meta description', async () => {
+    const findings = await crawl({
+      [A]: page(A, { description: 'Same' }),
+      [B]: page(B, { description: 'Same' }),
+      [C]: page(C, { description: 'Same' }),
+    });
+    expect(findings).toEqual([
+      expect.objectContaining({
+        code: 'CRAWL_DUPLICATE_DESCRIPTIONS',
+        severity: 'warning',
+        details: { description: 'Same', count: 3, urls: [A, B, C] },
+      }),
+    ]);
+  });
+
+  it('caps duplicate groups at 10, sorted by value, and the URLs in each at 10', async () => {
+    const pages: Record<string, string> = {};
+    for (let g = 11; g >= 0; g--) {
+      for (let p = 0; p < 2; p++) {
+        const url = `https://example.com/g${g}-${p}`;
+        pages[url] = page(url, { title: `Group ${String(g).padStart(2, '0')}` });
+      }
+    }
+    for (let p = 0; p < 12; p++) {
+      const url = `https://example.com/big-${String(p).padStart(2, '0')}`;
+      pages[url] = page(url, { description: 'Same everywhere' });
+    }
+    mockFetchPage.mockImplementation(async (url: string) => makePage(pages[url], { finalUrl: url }));
+    const findings = await auditCrawl(makeCtx({ sitemapUrls: Object.keys(pages), crawlLimit: 100 }));
+
+    const titles = findings.filter((f) => f.code === 'CRAWL_DUPLICATE_TITLES');
+    expect(titles.map((f) => f.details?.title)).toEqual(
+      Array.from({ length: 10 }, (_, g) => `Group ${String(g).padStart(2, '0')}`),
+    );
+    const descriptions = findings.filter((f) => f.code === 'CRAWL_DUPLICATE_DESCRIPTIONS');
+    expect(descriptions).toHaveLength(1);
+    expect(descriptions[0].details).toMatchObject({ description: 'Same everywhere', count: 12 });
+    expect(descriptions[0].details?.urls).toHaveLength(10);
+  });
+
+  it('leaves pages that answered non-2xx out of the duplicate checks', async () => {
+    mockFetchPage.mockImplementation(async (url: string) =>
+      makePage(page(url, { title: 'Shared' }), { status: url === B ? 404 : 200 }),
+    );
+    const findings = await auditCrawl(makeCtx({ sitemapUrls: [A, B] }));
+    expect(findings.map((f) => f.code)).toEqual(['CRAWL_PAGE_ERROR']);
+  });
+
+  it('reports CRAWL_CANONICAL_CHAIN when a canonical target names another canonical', async () => {
+    const findings = await crawl({
+      [A]: page(A, { canonical: `${B}/` }),
+      [B]: page(B, { canonical: C }),
+      [C]: page(C),
+    });
+    const chains = findings.filter((f) => f.code === 'CRAWL_CANONICAL_CHAIN');
+    expect(chains).toHaveLength(1);
+    expect(chains[0]).toMatchObject({ severity: 'warning', url: A, details: { canonical: `${B}/`, next: C } });
+    // Each hop is still its own per-page mismatch.
+    expect(findings.filter((f) => f.code === 'CRAWL_PAGE_CANONICAL_MISMATCH').map((f) => f.url)).toEqual([A, B]);
+  });
+
+  it('reports no chain when the canonical target is canonical to itself or was not crawled', async () => {
+    const findings = await crawl({
+      [A]: page(A, { canonical: B }),
+      [B]: page(B),
+      [C]: page(C, { canonical: 'https://example.com/elsewhere' }),
+    });
+    expect(findings.some((f) => f.code === 'CRAWL_CANONICAL_CHAIN')).toBe(false);
+  });
+
+  it('puts the crawl-wide findings after the per-page ones, in a fixed order', async () => {
+    const pages = {
+      [A]: page(A, { title: 'T', description: 'D', canonical: B }),
+      [B]: page(B, { title: 'T', description: 'D', canonical: C }),
+      [C]: page(C),
+    };
+    const first = (await crawl(pages)).map((f) => `${f.code} ${f.url}`);
+    const second = (await crawl(pages)).map((f) => `${f.code} ${f.url}`);
+    expect(first).toEqual(second);
+    expect(first).toEqual([
+      `CRAWL_PAGE_CANONICAL_MISMATCH ${A}`,
+      `CRAWL_PAGE_CANONICAL_MISMATCH ${B}`,
+      `CRAWL_DUPLICATE_TITLES ${A}`,
+      `CRAWL_DUPLICATE_DESCRIPTIONS ${A}`,
+      `CRAWL_CANONICAL_CHAIN ${A}`,
+    ]);
   });
 });

@@ -30,7 +30,8 @@ Each sourced to a Google Search Central page or a Next.js issue, all read 31 Oct
 Shipped: edge challenge, robots.txt status semantics and the AI-crawler matrix (v2.11.0 and
 v2.12.0), canonical integrity, host leak, strict sitemap validation, render-asset blocking, the
 2 MB cut-off, user-agent parity and the entry-URL redirect finding (v2.12.0), the soft-404 probe
-(v2.13.0). Open: crawl pages getting the homepage checks, and the smaller items below.
+(v2.13.0), crawl pages getting the homepage checks plus duplicate titles, descriptions and
+canonical chains across the crawl (v2.14.0). Open: the smaller items below.
 
 | Item | What it detects | Source | Size |
 |---|---|---|---|
