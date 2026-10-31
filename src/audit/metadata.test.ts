@@ -344,3 +344,237 @@ describe('auditMetadata', () => {
     expect(findings.map((f) => f.code)).not.toContain('TWITTER_IMAGE_BROKEN');
   });
 });
+
+describe('auditMetadata canonical integrity', () => {
+  const HEAD_REST = '<meta charset="utf-8"><meta name="viewport" content="w"><title>T</title>';
+  const NEW_CODES = [
+    'CANONICAL_MULTIPLE',
+    'CANONICAL_IN_BODY',
+    'CANONICAL_HEADER_CONFLICT',
+    'CANONICAL_RELATIVE',
+    'CANONICAL_TARGET_NOT_OK',
+    'CANONICAL_NOINDEX_CONFLICT',
+  ];
+
+  function shared(html: string, headers: Record<string, string> = {}) {
+    return makeCtx({ html, headers, finalUrl: 'https://example.com/' });
+  }
+
+  function page(head: string, body = ''): string {
+    return `<html><head>${HEAD_REST}${head}</head><body>${body}</body></html>`;
+  }
+
+  function codes(findings: Awaited<ReturnType<typeof auditMetadata>>): string[] {
+    return findings.map((f) => f.code);
+  }
+
+  // Every GET answers with `result`, at the URL asked for unless `finalUrl` says otherwise.
+  function target(result: { status?: number; finalUrl?: string; body?: string; headers?: Headers }) {
+    mockFetchPage.mockImplementation(async (url) => ({
+      body: result.body ?? '<html><head></head><body></body></html>',
+      status: result.status ?? 200,
+      headers: result.headers ?? new Headers(),
+      finalUrl: result.finalUrl ?? url,
+    }));
+  }
+
+  it('raises none of the canonical integrity codes on a clean page and makes no extra request', async () => {
+    const findings = await auditMetadata(shared(FULL_HTML, { link: '<https://example.com/>; rel="canonical"' }));
+    expect(codes(findings).filter((c) => NEW_CODES.includes(c))).toEqual([]);
+    expect(mockFetchPage).not.toHaveBeenCalled();
+  });
+
+  describe('CANONICAL_MULTIPLE', () => {
+    it('is raised when the canonicals name different URLs', async () => {
+      target({});
+      const findings = await auditMetadata(
+        shared(page('<link rel="canonical" href="https://example.com/"><link rel="canonical" href="https://example.com/b">')),
+      );
+      const multiple = findings.find((f) => f.code === 'CANONICAL_MULTIPLE');
+      expect(multiple?.severity).toBe('error');
+      expect(multiple?.details).toEqual({ hrefs: ['https://example.com/', 'https://example.com/b'] });
+    });
+
+    it('is not raised for the same URL written twice', async () => {
+      const findings = await auditMetadata(
+        shared(page('<link rel="canonical" href="https://example.com/"><link rel="canonical" href="/">')),
+      );
+      expect(codes(findings)).not.toContain('CANONICAL_MULTIPLE');
+    });
+  });
+
+  describe('CANONICAL_IN_BODY', () => {
+    it('is raised when the only canonical is in <body>', async () => {
+      const findings = await auditMetadata(shared(page('', '<p>x</p><link rel="canonical" href="https://example.com/">')));
+      const inBody = findings.find((f) => f.code === 'CANONICAL_IN_BODY');
+      expect(inBody?.severity).toBe('error');
+      expect(inBody?.details).toEqual({ hrefs: ['https://example.com/'] });
+      expect(codes(findings)).not.toContain('CANONICAL_MISSING');
+    });
+
+    it('is not raised when a canonical is also in <head>', async () => {
+      const findings = await auditMetadata(
+        shared(page('<link rel="canonical" href="https://example.com/">', '<p>x</p><link rel="canonical" href="https://example.com/">')),
+      );
+      expect(codes(findings)).not.toContain('CANONICAL_IN_BODY');
+    });
+
+    it('is left to the streamed metadata check on a Next.js page', async () => {
+      const findings = await auditMetadata(
+        shared(page('', '<p>x</p><link rel="canonical" href="https://example.com/">'), { 'x-powered-by': 'Next.js' }),
+      );
+      expect(codes(findings)).not.toContain('CANONICAL_IN_BODY');
+    });
+  });
+
+  describe('CANONICAL_HEADER_CONFLICT', () => {
+    it('is raised when the Link header names a different URL than the tag', async () => {
+      const findings = await auditMetadata(shared(FULL_HTML, { link: '<https://example.com/other>; rel="canonical"' }));
+      const conflict = findings.find((f) => f.code === 'CANONICAL_HEADER_CONFLICT');
+      expect(conflict?.severity).toBe('warning');
+      expect(conflict?.details).toEqual({ header: 'https://example.com/other', tag: 'https://example.com/' });
+    });
+
+    it('finds the canonical among other links in the header', async () => {
+      const findings = await auditMetadata(
+        shared(FULL_HTML, {
+          link: '</style.css>; rel=preload; as=style, <https://example.com/a,b>; title="x, y"; rel="alternate CANONICAL"',
+        }),
+      );
+      const conflict = findings.find((f) => f.code === 'CANONICAL_HEADER_CONFLICT');
+      expect(conflict?.details).toEqual({ header: 'https://example.com/a,b', tag: 'https://example.com/' });
+    });
+
+    it('is not raised when the header and the tag agree', async () => {
+      const findings = await auditMetadata(shared(FULL_HTML, { link: '<https://example.com/>; rel=canonical' }));
+      expect(codes(findings)).not.toContain('CANONICAL_HEADER_CONFLICT');
+    });
+
+    it('uses the header as the canonical when there is no tag', async () => {
+      target({});
+      const findings = await auditMetadata(shared(page(''), { link: '<https://example.com/other>; rel="canonical"' }));
+      expect(codes(findings)).not.toContain('CANONICAL_MISSING');
+      expect(codes(findings)).not.toContain('CANONICAL_HEADER_CONFLICT');
+      expect(findings.find((f) => f.code === 'CANONICAL_MISMATCH')?.details).toEqual({
+        canonical: 'https://example.com/other',
+        pageUrl: 'https://example.com/',
+      });
+    });
+
+    it('ignores a header link whose canonical is only in another param', async () => {
+      const findings = await auditMetadata(shared(page(''), { link: '<https://example.com/x>; title="rel=canonical"' }));
+      expect(codes(findings)).toContain('CANONICAL_MISSING');
+    });
+  });
+
+  describe('CANONICAL_RELATIVE', () => {
+    it('is raised for a relative href, which is still resolved for the other checks', async () => {
+      const findings = await auditMetadata(shared(page('<link rel="canonical" href="/">')));
+      const relative = findings.find((f) => f.code === 'CANONICAL_RELATIVE');
+      expect(relative?.severity).toBe('warning');
+      expect(relative?.details).toEqual({ href: '/', resolved: 'https://example.com/', kind: 'relative' });
+      expect(codes(findings)).not.toContain('CANONICAL_MISMATCH');
+    });
+
+    it('is raised for a fragment', async () => {
+      const findings = await auditMetadata(shared(page('<link rel="canonical" href="https://example.com/#top">')));
+      expect(findings.find((f) => f.code === 'CANONICAL_RELATIVE')?.details).toMatchObject({ kind: 'fragment' });
+    });
+
+    it('is raised for a protocol-relative href', async () => {
+      const findings = await auditMetadata(shared(page('<link rel="canonical" href="//example.com/">')));
+      expect(findings.find((f) => f.code === 'CANONICAL_RELATIVE')?.details).toMatchObject({ kind: 'relative' });
+    });
+
+    it('is not raised for an absolute href', async () => {
+      const findings = await auditMetadata(shared(FULL_HTML));
+      expect(codes(findings)).not.toContain('CANONICAL_RELATIVE');
+    });
+  });
+
+  describe('CANONICAL_TARGET_NOT_OK', () => {
+    const OTHER = page('<link rel="canonical" href="https://example.com/other">');
+
+    it('is raised when the target answers non-200', async () => {
+      target({ status: 404 });
+      const findings = await auditMetadata(shared(OTHER));
+      const notOk = findings.find((f) => f.code === 'CANONICAL_TARGET_NOT_OK');
+      expect(notOk?.severity).toBe('warning');
+      expect(notOk?.details).toEqual({ canonical: 'https://example.com/other', status: 404, noindex: false });
+      expect(mockFetchPage).toHaveBeenCalledTimes(1);
+      expect(mockFetchPage).toHaveBeenCalledWith('https://example.com/other', {});
+    });
+
+    it('is raised when the target redirects', async () => {
+      target({ finalUrl: 'https://example.com/elsewhere' });
+      const findings = await auditMetadata(shared(OTHER));
+      expect(findings.find((f) => f.code === 'CANONICAL_TARGET_NOT_OK')?.details).toMatchObject({
+        status: 200,
+        redirectedTo: 'https://example.com/elsewhere',
+      });
+    });
+
+    it('is raised when the target carries a noindex meta tag', async () => {
+      target({ body: '<html><head><meta name="robots" content="noindex"></head><body></body></html>' });
+      const findings = await auditMetadata(shared(OTHER));
+      expect(findings.find((f) => f.code === 'CANONICAL_TARGET_NOT_OK')?.details).toMatchObject({ noindex: true });
+    });
+
+    it('is raised when the target sends X-Robots-Tag: none', async () => {
+      target({ headers: new Headers({ 'x-robots-tag': 'none' }) });
+      const findings = await auditMetadata(shared(OTHER));
+      expect(findings.find((f) => f.code === 'CANONICAL_TARGET_NOT_OK')?.details).toMatchObject({ noindex: true });
+    });
+
+    it('is not raised when the target answers 200 and is indexable', async () => {
+      target({});
+      const findings = await auditMetadata(shared(OTHER));
+      expect(codes(findings)).not.toContain('CANONICAL_TARGET_NOT_OK');
+    });
+
+    it('is not raised when the target cannot be fetched', async () => {
+      mockFetchPage.mockRejectedValue(new Error('refused'));
+      const findings = await auditMetadata(shared(OTHER));
+      expect(codes(findings)).not.toContain('CANONICAL_TARGET_NOT_OK');
+    });
+
+    it('does not request a canonical on another host', async () => {
+      await auditMetadata(shared(page('<link rel="canonical" href="https://other.example/">')));
+      expect(mockFetchPage).not.toHaveBeenCalled();
+    });
+
+    it('passes the shared fetch options through', async () => {
+      target({});
+      const fetchOptions = { timeout: 5, auditedUrl: 'https://example.com/' };
+      await auditMetadata({ ...shared(OTHER), fetchOptions });
+      expect(mockFetchPage).toHaveBeenCalledWith('https://example.com/other', fetchOptions);
+    });
+  });
+
+  describe('CANONICAL_NOINDEX_CONFLICT', () => {
+    it('is raised for a noindex page whose canonical names another URL', async () => {
+      target({});
+      const findings = await auditMetadata(
+        shared(page('<meta name="robots" content="noindex"><link rel="canonical" href="https://example.com/other">')),
+      );
+      const conflict = findings.find((f) => f.code === 'CANONICAL_NOINDEX_CONFLICT');
+      expect(conflict?.severity).toBe('error');
+      expect(conflict?.details).toEqual({ canonical: 'https://example.com/other', source: 'meta' });
+    });
+
+    it('is raised when the noindex comes from X-Robots-Tag', async () => {
+      target({});
+      const findings = await auditMetadata(
+        shared(page('<link rel="canonical" href="https://example.com/other">'), { 'x-robots-tag': 'noindex' }),
+      );
+      expect(findings.find((f) => f.code === 'CANONICAL_NOINDEX_CONFLICT')?.details).toMatchObject({ source: 'header' });
+    });
+
+    it('is not raised for a noindex page with a self-referencing canonical', async () => {
+      const findings = await auditMetadata(
+        shared(page('<meta name="robots" content="noindex"><link rel="canonical" href="https://example.com/">')),
+      );
+      expect(codes(findings)).not.toContain('CANONICAL_NOINDEX_CONFLICT');
+    });
+  });
+});

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   getCanonicalUrl,
+  getCanonicalLinks,
   getNoindexDirective,
   getMetaRefresh,
   getMetaTag,
@@ -448,5 +449,47 @@ describe('locateMetadata', () => {
     const { head, bodyOnly } = locateMetadata('');
     expect(head.size).toBe(0);
     expect(bodyOnly.size).toBe(0);
+  });
+});
+
+describe('getCanonicalLinks', () => {
+  it('returns each canonical with whether it sits in <head>', () => {
+    const links = getCanonicalLinks(
+      '<html><head><link rel="canonical" href="https://example.com/a"></head><body><p>x</p><link rel="canonical" href="https://example.com/b"></body></html>',
+    );
+    expect(links).toEqual([
+      { href: 'https://example.com/a', inHead: true },
+      { href: 'https://example.com/b', inHead: false },
+    ]);
+  });
+
+  it('matches rel as a case-insensitive token list', () => {
+    const links = getCanonicalLinks(html('<link rel="Canonical" href="/a"><link rel="nofollow canonical" href="/b">'));
+    expect(links.map((l) => l.href)).toEqual(['/a', '/b']);
+  });
+
+  it('trims the href and skips an empty one', () => {
+    const links = getCanonicalLinks(html('<link rel="canonical" href="  /a  "><link rel="canonical" href="">'));
+    expect(links).toEqual([{ href: '/a', inHead: true }]);
+  });
+
+  it('skips canonicals that annotate an alternate version (hreflang, lang, media, type)', () => {
+    const links = getCanonicalLinks(
+      html(
+        '<link rel="canonical" hreflang="de" href="/de"><link rel="canonical" lang="fr" href="/fr">' +
+          '<link rel="canonical" media="print" href="/print"><link rel="canonical" type="application/pdf" href="/a.pdf">',
+      ),
+    );
+    expect(links).toEqual([]);
+  });
+
+  it('counts a canonical after an element that ends <head> early as in <body>', () => {
+    // <div> is not allowed in <head>, so the parser closes it there, as Google does.
+    const links = getCanonicalLinks('<html><head><div></div><link rel="canonical" href="/a"></head><body></body></html>');
+    expect(links).toEqual([{ href: '/a', inHead: false }]);
+  });
+
+  it('returns an empty list when there is no canonical', () => {
+    expect(getCanonicalLinks(html('<title>T</title>'))).toEqual([]);
   });
 });

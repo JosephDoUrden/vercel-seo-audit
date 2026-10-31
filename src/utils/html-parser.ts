@@ -18,6 +18,31 @@ export function getCanonicalUrl(html: string): string | null {
   return href?.trim() || null;
 }
 
+export interface CanonicalLink {
+  href: string;
+  /** Under <head> after parsing. An element <head> does not allow (a <div>, an <img>) ends it early. */
+  inHead: boolean;
+}
+
+// Attributes that make a canonical an alternate-version annotation. Google, "How to specify a
+// canonical with rel="canonical" and other methods" (updated 10 Jul 2026): "rel="canonical"
+// annotations with hreflang, lang, media, and type attributes are not used for canonicalization."
+const ALTERNATE_ATTRS = ['hreflang', 'lang', 'media', 'type'];
+
+/** Every <link> whose rel includes canonical, in document order, with a non-empty href. */
+export function getCanonicalLinks(html: string): CanonicalLink[] {
+  const $ = parseHtml(html);
+  const links: CanonicalLink[] = [];
+  $('link[rel][href]').each((_, el) => {
+    const rel = ($(el).attr('rel') ?? '').toLowerCase().split(/\s+/);
+    if (!rel.includes('canonical')) return;
+    if (ALTERNATE_ATTRS.some((attr) => $(el).attr(attr) !== undefined)) return;
+    const href = ($(el).attr('href') ?? '').trim();
+    if (href) links.push({ href, inHead: $(el).closest('head').length > 0 });
+  });
+  return links;
+}
+
 export function getNoindexDirective(html: string): boolean {
   const $ = parseHtml(html);
   // Attribute selectors are case-sensitive; crawlers are not.
