@@ -1,5 +1,5 @@
 import type { AuditContext, AuditFinding } from '../types.js';
-import { DEFAULT_PATHS } from '../constants.js';
+import { DEFAULT_PATHS, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
 import { fetchPage } from '../utils/http.js';
 import { getOrigin } from '../utils/url.js';
 
@@ -49,16 +49,39 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
       robotsTxt = res.body;
       // Store for cross-module use
       ctx.robotsTxt = robotsTxt;
+    } else if (res.status >= 500 || res.status === 429) {
+      // Google's robots.txt spec (updated 23 Oct 2026) on 5xx: "For the first 12 hours, Google
+      // stops crawling the site but keeps trying to fetch the robots.txt file. If Google can't
+      // fetch a new version, for the next 30 days Google will use the last good version". It
+      // treats "all 4xx errors, except 429" as a missing file, so 429 is grouped with 5xx here.
+      findings.push({
+        code: 'ROBOTS_SERVER_ERROR',
+        severity: 'error',
+        category: 'robots',
+        message: `robots.txt returned ${res.status}, so Google has paused crawling the site`,
+        explanation:
+          'Google treats a server error on robots.txt as a temporary stop: for the first 12 hours it crawls nothing on the site, then for up to 30 days it uses the last good copy it has cached, or no restrictions if it has none.',
+        suggestion:
+          'Make /robots.txt return 200, or a 404 if you do not want one. Check the route, middleware and any rate limiting in front of it.',
+        details: { status: res.status },
+        url: robotsUrl,
+      });
+      return findings;
     } else {
+      // "Google's crawlers treat all 4xx errors, except 429, as if a valid robots.txt file
+      // didn't exist. This means that Google assumes that there are no crawl restrictions."
+      // The spec treats a redirect chain past five hops as a 404 as well; fetchPage does not
+      // expose the hop count, so that case is not reported separately.
       findings.push({
         code: 'ROBOTS_MISSING',
         severity: 'warning',
         category: 'robots',
-        message: 'robots.txt not found',
+        message: `robots.txt not found (${res.status})`,
         explanation:
-          'Without a robots.txt, search engines have no guidance on which pages to crawl or avoid.',
+          'Google treats a 4xx on robots.txt, 401 and 403 included, as if the file did not exist: it assumes there are no crawl restrictions, and search engines get no guidance on which pages to crawl or avoid.',
         suggestion:
           'Create a robots.txt file at the root of your site. In Next.js App Router, use the metadata API.',
+        details: { status: res.status },
         url: robotsUrl,
       });
       return findings;
@@ -76,6 +99,22 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
       url: robotsUrl,
     });
     return findings;
+  }
+
+  const bytes = Buffer.byteLength(robotsTxt, 'utf8');
+  if (bytes > ROBOTS_TXT_MAX_BYTES) {
+    findings.push({
+      code: 'ROBOTS_TOO_LARGE',
+      severity: 'warning',
+      category: 'robots',
+      message: `robots.txt is ${bytes} bytes, over Google's 500 KiB limit`,
+      explanation:
+        'Google reads the first 500 KiB of robots.txt and ignores everything after it, so rules past that point have no effect.',
+      suggestion:
+        'Shrink robots.txt by consolidating rules, for example by moving excluded material into one directory.',
+      details: { bytes, limit: ROBOTS_TXT_MAX_BYTES },
+      url: robotsUrl,
+    });
   }
 
   const { rules, sitemaps } = parseRobotsTxt(robotsTxt);
