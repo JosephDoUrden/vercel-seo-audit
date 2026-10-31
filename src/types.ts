@@ -131,6 +131,9 @@ export const ISSUE_CODES = [
   'VERCEL_PREVIEW_INDEXABLE',
   // Edge challenge or WAF block, on the page, robots.txt or the sitemap
   'EDGE_CHALLENGE',
+  // robots.txt rules that block what the page loads
+  'ROBOTS_BLOCKS_RENDER_ASSETS',
+  'ROBOTS_BLOCKS_NEXT_IMAGE',
 ] as const;
 
 export type IssueCode = (typeof ISSUE_CODES)[number];

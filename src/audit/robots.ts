@@ -1,32 +1,41 @@
 import type { AuditContext, AuditFinding } from '../types.js';
 import { DEFAULT_PATHS, ROBOTS_TXT_MAX_BYTES } from '../constants.js';
 import { detectChallenge, edgeChallengeFinding } from '../utils/challenge.js';
+import * as cheerio from 'cheerio';
 import { fetchPage } from '../utils/http.js';
+import { matchRobots, selectRobotsGroup, type RobotsGroup } from '../utils/robots-match.js';
 import { getOrigin } from '../utils/url.js';
 
-interface RobotsRule {
-  userAgent: string;
-  disallow: string[];
-  allow: string[];
-}
+type RobotsRule = RobotsGroup;
 
 function parseRobotsTxt(txt: string): { rules: RobotsRule[]; sitemaps: string[] } {
-  const lines = txt.split('\n').map((l) => l.trim());
+  // A # starts a comment anywhere on the line
+  const lines = txt.split('\n').map((l) => l.replace(/#.*/, '').trim());
   const rules: RobotsRule[] = [];
   const sitemaps: string[] = [];
   let current: RobotsRule | null = null;
+  let lastWasUserAgent = false;
 
   for (const line of lines) {
-    if (line.startsWith('#') || line === '') continue;
+    if (line === '') continue;
 
     const [key, ...rest] = line.split(':');
     const value = rest.join(':').trim();
     const keyLower = key.toLowerCase().trim();
 
     if (keyLower === 'user-agent') {
-      current = { userAgent: value, disallow: [], allow: [] };
+      // Consecutive User-agent lines open one group: the rules that follow apply to each of them.
+      current =
+        lastWasUserAgent && current
+          ? { userAgent: value, disallow: current.disallow, allow: current.allow }
+          : { userAgent: value, disallow: [], allow: [] };
       rules.push(current);
-    } else if (keyLower === 'disallow' && current) {
+      lastWasUserAgent = true;
+      continue;
+    }
+    lastWasUserAgent = false;
+
+    if (keyLower === 'disallow' && current) {
       if (value) current.disallow.push(value);
     } else if (keyLower === 'allow' && current) {
       if (value) current.allow.push(value);
@@ -162,6 +171,8 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
     }
   }
 
+  findings.push(...checkRenderAssets(ctx, rules, origin, robotsUrl));
+
   // Check for sitemap directive
   if (sitemaps.length === 0) {
     findings.push({
@@ -173,6 +184,115 @@ export async function auditRobots(ctx: AuditContext): Promise<AuditFinding[]> {
         'Declaring your sitemap URL in robots.txt helps search engines discover it faster.',
       suggestion:
         'Add a Sitemap: https://yourdomain.com/sitemap.xml line to robots.txt.',
+      url: robotsUrl,
+    });
+  }
+
+  return findings;
+}
+
+// Google's robots.txt introduction (https://developers.google.com/search/docs/crawling-indexing/robots/intro,
+// last updated 10 Dec 2025, read 31 Oct 2026): "if the absence of these resources make the page harder
+// for Google's crawler to understand the page, don't block them, or else Google won't do a good job of
+// analyzing pages that depend on those resources." JavaScript SEO basics
+// (https://developers.google.com/search/docs/crawling-indexing/javascript/javascript-seo-basics, last
+// updated 04 Mar 2026, read 31 Oct 2026): "Google Search won't render JavaScript from blocked files or
+// on blocked pages." Next.js sites get here by disallowing /_next/ to save crawl budget; the reply on
+// https://github.com/vercel/next.js/discussions/89939 (13 Feb 2026) says "Keep _next/static reachable".
+const MAX_BLOCKED_LISTED = 10;
+
+function sameOriginUrls(
+  $: cheerio.CheerioAPI,
+  selector: string,
+  attr: string,
+  base: string,
+  origin: string,
+): URL[] {
+  const urls: URL[] = [];
+  for (const el of $(selector).toArray()) {
+    const value = $(el).attr(attr)?.trim();
+    if (!value) continue;
+    try {
+      const url = new URL(value, base);
+      if (url.origin === origin) urls.push(url);
+    } catch {
+      // Not a URL; the browser skips it too
+    }
+  }
+  return urls;
+}
+
+function blockedBy(urls: URL[], group: RobotsGroup): { blocked: string[]; rule?: string } {
+  const blocked: string[] = [];
+  let rule: string | undefined;
+  for (const href of new Set(urls.map((u) => u.href))) {
+    const url = new URL(href);
+    const match = matchRobots(url.pathname + url.search, group);
+    if (match.allowed || !match.rule) continue;
+    blocked.push(href);
+    rule ??= `Disallow: ${match.rule.path}`;
+  }
+  return { blocked, rule };
+}
+
+function checkRenderAssets(
+  ctx: AuditContext,
+  rules: RobotsRule[],
+  origin: string,
+  robotsUrl: string,
+): AuditFinding[] {
+  // Phase 0 shares the page. Without it there is nothing to render, and the page modules report why.
+  if (!ctx.html) return [];
+  const group = selectRobotsGroup(rules, 'googlebot');
+  if (!group) return [];
+
+  const base = ctx.finalUrl ?? ctx.normalizedUrl;
+  const page = new URL(base);
+  // A blocked page is not rendered at all; ROBOTS_BLOCKS_ALL and ROBOTS_BLOCKS_GOOGLEBOT cover that.
+  if (page.origin === origin && !matchRobots(page.pathname + page.search, group).allowed) return [];
+
+  const $ = cheerio.load(ctx.html);
+  const findings: AuditFinding[] = [];
+
+  const render = blockedBy(
+    [
+      ...sameOriginUrls($, 'script[src]', 'src', base, origin),
+      ...sameOriginUrls($, 'link[rel~="stylesheet" i][href]', 'href', base, origin),
+    ],
+    group,
+  );
+  if (render.blocked.length > 0) {
+    const nextStatic = render.blocked.every((u) => new URL(u).pathname.startsWith('/_next/static/'));
+    findings.push({
+      code: 'ROBOTS_BLOCKS_RENDER_ASSETS',
+      severity: 'error',
+      category: 'robots',
+      message: `robots.txt blocks ${render.blocked.length} of the page's scripts and stylesheets from Googlebot`,
+      explanation:
+        'Googlebot does not fetch URLs that robots.txt disallows, so it cannot run these scripts or apply these styles. It cannot render the page and indexes the raw HTML only.',
+      suggestion: nextStatic
+        ? 'Remove the Disallow rule, or add Allow: /_next/static/ above it in the same group. Google applies the longest matching rule, so the Allow wins for the build assets.'
+        : 'Remove the Disallow rule, or add an Allow rule for the asset paths above it in the same group. Google applies the longest matching rule.',
+      details: { blocked: render.blocked.slice(0, MAX_BLOCKED_LISTED), rule: render.rule, group: group.userAgent },
+      url: robotsUrl,
+    });
+  }
+
+  // Images matter to Google Images, not to rendering, hence info
+  const image = blockedBy(
+    sameOriginUrls($, 'img[src]', 'src', base, origin).filter((u) => u.pathname === '/_next/image'),
+    group,
+  );
+  if (image.blocked.length > 0) {
+    findings.push({
+      code: 'ROBOTS_BLOCKS_NEXT_IMAGE',
+      severity: 'info',
+      category: 'robots',
+      message: `robots.txt blocks /_next/image, which ${image.blocked.length} of the page's images load through`,
+      explanation:
+        'Googlebot cannot fetch images served through the Next.js image optimiser, so they will not show in Google Images. Rendering is not affected.',
+      suggestion: 'If the images should appear in image search, add Allow: /_next/image to the same group.',
+      details: { blocked: image.blocked.slice(0, MAX_BLOCKED_LISTED), rule: image.rule, group: group.userAgent },
       url: robotsUrl,
     });
   }
