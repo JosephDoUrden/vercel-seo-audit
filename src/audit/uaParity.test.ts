@@ -172,6 +172,21 @@ describe('auditUaParity', () => {
     expect(metadata).toBeUndefined();
   });
 
+  it('reads <iframe>, <noembed> and <noframes> content as text, as cheerio does', async () => {
+    const tricky =
+      '<html><head></head><body><iframe><title>Framed</title></iframe>' +
+      '<noembed><title>Embed</title></noembed><noframes><title>Frames</title></noframes>' +
+      '<title>Example</title><link rel="canonical" href="https://example.com/"><h1>Example</h1></body></html>';
+    const $ = cheerio.load(tricky);
+    answer({ [GOOGLEBOT]: page(tricky) });
+
+    const findings = await auditUaParity(makeCtx());
+
+    expect($('title').first().text()).toBe('Example');
+    // The title agrees with the default page, so the raw-text tags did not open a <title>.
+    expect(findings.find((f) => f.code === 'UA_METADATA_DIFFERS')).toBeUndefined();
+  });
+
   it('ignores case, whitespace and a trailing slash on the canonical', async () => {
     answer({
       [GOOGLEBOT]: page(html({ title: '<title>  EXAMPLE\n</title>', canonical: '<link rel="canonical" href="https://example.com">' })),
