@@ -26,7 +26,7 @@ npx vercel-seo-audit https://your-site.com
 
 ![vercel-seo-audit running against a live site, with the redirect, sitemap, structured data and streamed-metadata modules](./docs/demo.gif)
 
-Needs Node.js 20.18.1 or later.
+Needs Node.js 20.19.0 or later.
 
 Install globally (optional):
 
