@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.20.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.19.0...vercel-seo-audit-v2.20.0) (2026-11-13)
+
+
+### Bug Fixes
+
+* **deps:** htmlparser2 12, Node.js 20.19.0 or later ([#217](https://github.com/JosephDoUrden/vercel-seo-audit/issues/217)) ([b68f6ee](https://github.com/JosephDoUrden/vercel-seo-audit/commit/b68f6ee8828ac97f8f0f5a946a4f075cda3ab56e))
+
 ## [2.19.0](https://github.com/JosephDoUrden/vercel-seo-audit/compare/vercel-seo-audit-v2.18.0...vercel-seo-audit-v2.19.0) (2026-10-31)
 
 
