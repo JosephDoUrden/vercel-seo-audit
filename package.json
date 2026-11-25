@@ -54,7 +54,7 @@
     "commander": "^15.0.0",
     "fast-xml-parser": "^5.11.2",
     "htmlparser2": "^12.0.0",
-    "undici": "^7.30.1"
+    "undici": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
