@@ -12,6 +12,10 @@ updates:
       # chalk 6 needs Node 22; we support Node 20 (package.json engines).
       - dependency-name: "chalk"
         update-types: ["version-update:semver-major"]
+      # undici 8 replaces Node's global dispatcher on import, which drops the env proxy
+      # (NODE_USE_ENV_PROXY), and needs Node 22.19. Revisit when we drop Node 20.
+      - dependency-name: "undici"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
